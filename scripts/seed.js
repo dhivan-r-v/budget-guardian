@@ -72,6 +72,7 @@ const pad = (n) => String(n).padStart(2, '0');
 
 function generateMonth(y, m, lastDay, isSpikeMonth) {
   const txns = [];
+  const monthDays = daysInMonth(y, m);
   const add = (day, merchant, description, cents, category, recurring = false) => {
     if (day < 1 || day > lastDay) return;
     txns.push({
@@ -101,16 +102,16 @@ function generateMonth(y, m, lastDay, isSpikeMonth) {
   for (const start of [1, 8, 15, 22]) {
     add(start + int(0, 4), pick(GROCERY), 'Groceries', int(3500, 8500), 'food');
   }
-  for (let i = int(7, 10); i > 0; i--) add(int(1, 28), pick(DINING), 'Food order', int(1100, 3400), 'food');
-  for (let i = int(10, 14); i > 0; i--) add(int(1, 28), pick(COFFEE), 'Coffee', int(450, 695), 'food');
+  for (let i = int(7, 10); i > 0; i--) add(int(1, monthDays), pick(DINING), 'Food order', int(1100, 3400), 'food');
+  for (let i = int(10, 14); i > 0; i--) add(int(1, monthDays), pick(COFFEE), 'Coffee', int(450, 695), 'food');
 
   for (let i = int(2, 4); i > 0; i--) {
     const [merchant, description] = pick(SHOPPING);
-    add(int(1, 28), merchant, description, int(1500, 7500), 'shopping');
+    add(int(1, monthDays), merchant, description, int(1500, 7500), 'shopping');
   }
   for (let i = int(1, 2); i > 0; i--) {
     const [merchant, description, min, max] = pick(ENTERTAINMENT_ONE_OFF);
-    add(int(1, 28), merchant, description, int(min, max), 'entertainment');
+    add(int(1, monthDays), merchant, description, int(min, max), 'entertainment');
   }
 
   txns.sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));

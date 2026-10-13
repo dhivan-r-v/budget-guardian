@@ -1,4 +1,6 @@
 import express from 'express';
+import { openDb } from './src/db.js';
+import { detectSpikes } from './src/spikes.js';
 
 const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_BASE_URL, PORT = 3000 } = process.env;
 if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
@@ -6,6 +8,7 @@ if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
   process.exit(1);
 }
 
+const db = openDb();
 const app = express();
 app.use(express.json());
 
@@ -79,6 +82,19 @@ app.post('/api/capture-order/:orderId', async (req, res, next) => {
     res.json(capture);
   } catch (err) {
     next(err);
+  }
+});
+
+// Optional ?asOf=YYYY-MM-DD to view the report as of another day (defaults to today).
+app.get('/api/spikes', (req, res) => {
+  const { asOf } = req.query;
+  if (asOf !== undefined && (typeof asOf !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(asOf))) {
+    return res.status(400).json({ error: 'asOf must be YYYY-MM-DD' });
+  }
+  try {
+    res.json(detectSpikes(db, asOf ? { asOf } : {}));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
