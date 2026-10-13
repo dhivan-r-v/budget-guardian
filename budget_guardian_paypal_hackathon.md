@@ -62,6 +62,7 @@ PORT=3000
 - Habit insights done (`src/habits.js`, `GET /api/habits`, shown in `npm run spikes`): one-off purchases in flexible categories that average 4+/month, appear in 3+ baseline months and average $30 or less, grouped by category + description; shows monthly/yearly cost and what halving saves. Seed now also marks food flexible (demo: coffee $69.22/month, food delivery $201.92/month).
 - Approval + PayPal action done (`src/approvals.js`, `src/paypal.js`, `public/index.html`): user approves one option in the page; server recomputes the amount (refuses if it changed), records the approval, then sends a PayPal sandbox Payout to `SAVINGS_RECEIVER_EMAIL` with the approval id as `sender_batch_id`. One plan per category per month. Verified Oct 13: $40.64 and $27.09 payouts SUCCESS (the second exposed the one-plan rule, since fixed).
 - React dashboard done (`client/`, Vite + React 18, served by Express from `client/dist`): headline overspend, summary tiles, monthly chart per category (so far + projected vs usual, hover + table view), cause breakdown bar, approve flow, habits, approvals, flexible-category switches. Validated palette, light/dark, works at 375px. Advice endpoint no longer waits for the LLM (template now, AI text on a later load).
+- Render-ready (`render.yaml`): web service `0.5c-512mb` ($7/month) in Singapore + 1 GB disk ($0.25/month) at `/var/data` for SQLite, health check `/api/health`, seeds demo data on first start (`seed.js --if-empty`), `DEMO_AS_OF=2026-10-13` pins the demo date (dashboard shows a "Sandbox demo" badge), `ADMIN_TOKEN` protects `POST /api/categorize`. `npm run reset-demo [--reseed]` clears approvals. Rehearsed locally with `NODE_ENV=production`.
 
 ## Roadmap
 **Week 1 (Oct 13-19):** finish sandbox setup and test order; optionally create US sandbox accounts; repo, license, `.gitignore`.
@@ -82,4 +83,4 @@ Technological Implementation, Design, Potential Impact, Innovation, Presentation
 Aim for the "Best Use of Agentic Commerce" and "Best Use of PayPal + AI" honorable mentions.
 
 ## Next task
-Deploy to Render (Week 4: persistent disk for SQLite, env vars, build = `npm ci && npm run build`). Also: run `npm run categorize` once Gemini is available and record the accuracy; clear the approvals table before recording the demo.
+User creates the Render service from the Blueprint (`render.yaml`) and enters the secret env vars; then verify the live URL. Then README with run instructions, demo video, Devpost write-up. Also: `npm run categorize` once Gemini is available; `npm run reset-demo` before recording.

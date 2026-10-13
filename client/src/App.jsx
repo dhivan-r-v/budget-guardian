@@ -56,7 +56,7 @@ export default function App() {
 
   return (
     <main className="app">
-      <Header month={advice.month} daysElapsed={advice.daysElapsed} daysInMonth={advice.daysInMonth} />
+      <Header month={advice.month} daysElapsed={advice.daysElapsed} daysInMonth={advice.daysInMonth} demo={advice.demo} asOf={advice.asOf} />
       <Hero spikes={advice.spikes} history={history} approvals={approvals} month={advice.month} savingsById={savingsById} />
 
       <h2 className="section">{advice.spikes.length ? 'Spending spikes' : 'This month'}</h2>

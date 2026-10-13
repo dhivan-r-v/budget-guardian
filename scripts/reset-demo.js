@@ -1,0 +1,14 @@
+// Clears approval history (and, with --reseed, regenerates the demo transactions) so a
+// demo starts clean. Money already sent in the PayPal sandbox is not reversed.
+// Usage: node scripts/reset-demo.js [--reseed]
+
+import { parseArgs } from 'node:util';
+import { execFileSync } from 'node:child_process';
+import { openDb, DB_PATH } from '../src/db.js';
+
+const { values: args } = parseArgs({ options: { reseed: { type: 'boolean', default: false } } });
+const db = openDb();
+const { changes } = db.prepare('DELETE FROM approvals').run();
+console.log(`Cleared ${changes} approval(s) from ${DB_PATH}.`);
+db.close();
+if (args.reseed) execFileSync(process.execPath, ['scripts/seed.js'], { stdio: 'inherit' });
