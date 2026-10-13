@@ -45,6 +45,7 @@ function publicTransportOptions(entry, report, opts) {
     if (savingsCents <= 0) continue; // transit would cost more than the fuel it replaces
     const gallons = fuelAvoidedCents / opts.gasPricePerGallonCents;
     options.push({
+      id: `${entry.category}:public_transport:${days}`,
       type: 'public_transport',
       transitDays: days,
       fuelAvoidedCents,
@@ -103,6 +104,7 @@ function subscriptionOptions(db, entry, report) {
   return {
     options: [
       {
+        id: `${entry.category}:skip_subscriptions`,
         type: 'skip_subscriptions',
         subscriptions,
         savingsCents, // this month: only subscriptions not billed yet
@@ -119,6 +121,7 @@ function cutBackOptions(entry, report, opts) {
   const usualRemainingCents = Math.round((entry.usualOneOffCents * (daysInMonth - daysElapsed)) / daysInMonth);
   const options = opts.cutBackPercents
     .map((percent) => ({
+      id: `${entry.category}:cut_back:${percent}`,
       type: 'cut_back',
       percent,
       savingsCents: Math.round((usualRemainingCents * percent) / 100),

@@ -3,6 +3,7 @@ import { openDb } from './src/db.js';
 import { detectSpikes } from './src/spikes.js';
 import { explainSpikes } from './src/causes.js';
 import { suggestSavings, suggestSavingsForSpikes, setFlexible } from './src/savings.js';
+import { adviseCategory, adviseSpikes } from './src/advisor.js';
 
 const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_BASE_URL, PORT = 3000 } = process.env;
 if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
@@ -116,6 +117,25 @@ app.get('/api/savings', (req, res) => {
   const entry = report.categories.find((c) => c.category === req.query.category);
   if (!entry) return res.status(404).json({ error: `no spending found in category "${req.query.category}"` });
   res.json(suggestSavings(db, report, entry));
+});
+
+// Friendly advice for every spike: cause, savings options and AI-written text (or a
+// code-written fallback). Add ?category=entertainment to also get a non-spiking category.
+app.get('/api/advice', async (req, res, next) => {
+  const report = reportFor(req, res);
+  if (!report) return;
+  try {
+    const result = await adviseSpikes(db, report);
+    const extra = [req.query.category ?? []].flat().filter((c) => !report.spikes.some((s) => s.category === c));
+    const others = [];
+    for (const category of extra) {
+      const entry = report.categories.find((c) => c.category === category);
+      if (entry) others.push({ ...entry, ...(await adviseCategory(db, report, entry)) });
+    }
+    res.json({ ...result, others });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // Every category seen in transactions, with whether the user marked it flexible.

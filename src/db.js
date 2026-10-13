@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS category_prefs (
   category TEXT PRIMARY KEY,
   flexible INTEGER NOT NULL CHECK (flexible IN (0, 1))
 );
+
+-- Validated LLM responses, keyed by a hash of model + prompt version + input facts,
+-- so identical facts never spend API quota twice.
+CREATE TABLE IF NOT EXISTS ai_cache (
+  key        TEXT PRIMARY KEY,
+  model      TEXT NOT NULL,
+  response   TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
 `;
 
 export function openDb(file = DB_PATH) {

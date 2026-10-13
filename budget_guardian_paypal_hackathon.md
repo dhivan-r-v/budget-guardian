@@ -57,6 +57,7 @@ PORT=3000
 - Spike detector done (`src/spikes.js`, `GET /api/spikes`, `npm run spikes`, `npm test`). Projection = spent so far + usual spending for the rest of the month; spike = 30%+ and $25+ above the usual monthly average.
 - Cause step done (`src/causes.js`): splits a spike exactly into more often / higher prices / recurring changes, flags large purchases; included in `GET /api/spikes`.
 - Savings + CO2 done (`src/savings.js`): fuel → public transport days (fuel minus fares, kg CO2 at $3.50/gal and 8.887 kg/gal), entertainment → skip subscriptions not billed yet, other flexible categories → cut back. Only for categories the user marked flexible (`category_prefs`, `GET/PUT /api/categories`). `GET /api/savings?category=`.
+- AI advice done (`src/advisor.js`, `src/ai.js`, `GET /api/advice`, `npm run advice`): Gemini free tier (default `gemini-flash-lite-latest`) writes text around code-formatted facts; any number not in the facts is rejected; falls back to code-written text on rejection, API error or 15s timeout; validated answers cached in `ai_cache`. Free tier is flaky (503s, 5 req/min on some models), so the demo relies on the cache + fallback.
 
 ## Roadmap
 **Week 1 (Oct 13-19):** finish sandbox setup and test order; optionally create US sandbox accounts; repo, license, `.gitignore`.
@@ -77,4 +78,4 @@ Technological Implementation, Design, Potential Impact, Innovation, Presentation
 Aim for the "Best Use of Agentic Commerce" and "Best Use of PayPal + AI" honorable mentions.
 
 ## Next task
-AI explanations: the LLM turns the spike, cause and savings numbers into friendly text (it never computes amounts). Then habit insights, the approval button and the PayPal action.
+LLM categorizer (label transactions + recurring, JSON, cached) using the same Gemini module and number-free validation. Then habit insights, the approval button and the PayPal action.

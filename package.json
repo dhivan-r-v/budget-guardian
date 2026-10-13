@@ -11,9 +11,11 @@
     "start": "node --env-file-if-exists=.env server.js",
     "seed": "node scripts/seed.js",
     "spikes": "node scripts/spikes.js",
-    "test": "node --test"
+    "test": "node --test",
+    "advice": "node --env-file-if-exists=.env scripts/advice.js"
   },
   "dependencies": {
+    "@google/genai": "^2.29.0",
     "express": "^5.3.0"
   }
 }
