@@ -24,6 +24,13 @@ CREATE TABLE IF NOT EXISTS transactions (
   created_at     TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_transactions_occurred_at ON transactions (occurred_at);
+
+-- Categories the user has marked as flexible (willing to cut). Savings are only
+-- suggested for these; the AI never decides what is a need or a want.
+CREATE TABLE IF NOT EXISTS category_prefs (
+  category TEXT PRIMARY KEY,
+  flexible INTEGER NOT NULL CHECK (flexible IN (0, 1))
+);
 `;
 
 export function openDb(file = DB_PATH) {
