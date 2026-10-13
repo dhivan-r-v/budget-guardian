@@ -1,4 +1,4 @@
-// Prints the spike report, with causes and savings options, for the local database.
+// Prints the spike report, with causes, savings options and habits, for the local database.
 // Usage: node scripts/spikes.js [--as-of YYYY-MM-DD]
 
 import { parseArgs } from 'node:util';
@@ -6,14 +6,16 @@ import { openDb } from '../src/db.js';
 import { detectSpikes } from '../src/spikes.js';
 import { explainSpikes } from '../src/causes.js';
 import { suggestSavings } from '../src/savings.js';
+import { habitInsights } from '../src/habits.js';
+import { usd } from '../src/advisor.js';
 
 const { values: args } = parseArgs({ options: { 'as-of': { type: 'string' } } });
 const db = openDb();
 const report = explainSpikes(db, detectSpikes(db, args['as-of'] ? { asOf: args['as-of'] } : {}));
 const savings = report.categories.map((c) => suggestSavings(db, report, c)).filter((s) => s.flexible);
+const habits = habitInsights(db, report);
 db.close();
 
-const usd = (cents) => `${cents < 0 ? '-' : ''}$${(Math.abs(cents) / 100).toFixed(2)}`;
 console.log(
   `${report.month}, day ${report.daysElapsed} of ${report.daysInMonth}. ` +
     `Baseline: ${report.baselineMonths.join(', ') || 'none'}.`,
@@ -66,4 +68,14 @@ Savings for ${s.category}:`);
     const a = s.assumptions;
     console.log(`  Assumes ${usd(a.dailyFuelCents)}/day fuel this month, ${usd(a.transitFarePerDayCents)}/day fares, gas ${usd(a.gasPricePerGallonCents)}/gal, ${a.co2KgPerGallon} kg CO2/gal, ${a.remainingDays} days left.`);
   }
+}
+
+console.log('\nHabits (small, frequent purchases in flexible categories):');
+if (!habits.length) console.log('  (none)');
+for (const h of habits) {
+  console.log(
+    `  ${h.label} (${h.category}; ${h.merchants.join(', ')}): ${h.perMonth}x/month at ${usd(h.averageCents)} = ${usd(h.monthlyCents)}/month, ${usd(h.yearlyCents)}/year. ` +
+      `This month so far: ${h.thisMonth.count}x, ${usd(h.thisMonth.cents)}.`,
+  );
+  console.log(`    Cut to ${h.cutBack.perMonth}x/month: save ${usd(h.cutBack.savingsPerMonthCents)}/month, ${usd(h.cutBack.savingsPerYearCents)}/year.`);
 }

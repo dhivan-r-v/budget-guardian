@@ -5,6 +5,7 @@ import { explainSpikes } from './src/causes.js';
 import { suggestSavings, suggestSavingsForSpikes, setFlexible } from './src/savings.js';
 import { adviseCategory, adviseSpikes } from './src/advisor.js';
 import { categorize, accuracy } from './src/categorizer.js';
+import { habitInsights } from './src/habits.js';
 
 const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_BASE_URL, PORT = 3000 } = process.env;
 if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
@@ -137,6 +138,12 @@ app.get('/api/advice', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// Small, frequent purchases from past months in flexible categories, with cut-back savings.
+app.get('/api/habits', (req, res) => {
+  const report = reportFor(req, res);
+  if (report) res.json({ asOf: report.asOf, baselineMonths: report.baselineMonths, habits: habitInsights(db, report) });
 });
 
 // Labels uncategorized transactions with the LLM. Safe to call repeatedly: only
