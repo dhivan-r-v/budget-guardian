@@ -58,6 +58,7 @@ PORT=3000
 - Cause step done (`src/causes.js`): splits a spike exactly into more often / higher prices / recurring changes, flags large purchases; included in `GET /api/spikes`.
 - Savings + CO2 done (`src/savings.js`): fuel → public transport days (fuel minus fares, kg CO2 at $3.50/gal and 8.887 kg/gal), entertainment → skip subscriptions not billed yet, other flexible categories → cut back. Only for categories the user marked flexible (`category_prefs`, `GET/PUT /api/categories`). `GET /api/savings?category=`.
 - AI advice done (`src/advisor.js`, `src/ai.js`, `GET /api/advice`, `npm run advice`): Gemini free tier (default `gemini-flash-lite-latest`) writes text around code-formatted facts; any number not in the facts is rejected; falls back to code-written text on rejection, API error or 15s timeout; validated answers cached in `ai_cache`. Free tier is flaky (503s, 5 req/min on some models), so the demo relies on the cache + fallback.
+- Categorizer done (`src/categorizer.js`, `POST /api/categorize`, `npm run categorize [--reset]`): groups transactions by merchant + description (seed data = 32 groups = 1 request), code computes recurring evidence, LLM picks from a fixed category list, invalid labels ignored, complete batches cached, accuracy vs seed labels reported. Not yet run against Gemini: free tier returned 503 / timeouts on Oct 13.
 
 ## Roadmap
 **Week 1 (Oct 13-19):** finish sandbox setup and test order; optionally create US sandbox accounts; repo, license, `.gitignore`.
@@ -78,4 +79,4 @@ Technological Implementation, Design, Potential Impact, Innovation, Presentation
 Aim for the "Best Use of Agentic Commerce" and "Best Use of PayPal + AI" honorable mentions.
 
 ## Next task
-LLM categorizer (label transactions + recurring, JSON, cached) using the same Gemini module and number-free validation. Then habit insights, the approval button and the PayPal action.
+Run `npm run categorize` once Gemini is available and record the accuracy. Then habit insights, the approval button and the PayPal action.
