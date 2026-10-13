@@ -81,6 +81,22 @@ test('approving the same option twice in a month pays once', async () => {
   assert.equal(client.payouts.length, 1);
 });
 
+test('options in a category are alternatives: only one plan per category per month', async () => {
+  const db = fuelDb();
+  const client = fakePayPal();
+  const { approval } = await approve(db, request(), { client, receiver: RECEIVER }); // 3 days
+  await assert.rejects(
+    approve(db, request({ optionId: 'fuel:public_transport:2', expectedAmountCents: 2900 }), { client, receiver: RECEIVER }),
+    (err) => {
+      assert.equal(err.status, 409);
+      assert.match(err.message, /already approved a fuel plan this month: Public transport instead of driving on 3 days/);
+      assert.equal(err.details.approvalId, approval.id);
+      return true;
+    },
+  );
+  assert.equal(client.payouts.length, 1);
+});
+
 test('categories not marked flexible, and unknown options, are refused', async () => {
   const db = fuelDb();
   const client = fakePayPal();

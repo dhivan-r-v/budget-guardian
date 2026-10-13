@@ -60,6 +60,7 @@ PORT=3000
 - AI advice done (`src/advisor.js`, `src/ai.js`, `GET /api/advice`, `npm run advice`): Gemini free tier (default `gemini-flash-lite-latest`) writes text around code-formatted facts; any number not in the facts is rejected; falls back to code-written text on rejection, API error or 15s timeout; validated answers cached in `ai_cache`. Free tier is flaky (503s, 5 req/min on some models), so the demo relies on the cache + fallback.
 - Categorizer done (`src/categorizer.js`, `POST /api/categorize`, `npm run categorize [--reset]`): groups transactions by merchant + description (seed data = 32 groups = 1 request), code computes recurring evidence, LLM picks from a fixed category list, invalid labels ignored, complete batches cached, accuracy vs seed labels reported. Not yet run against Gemini: free tier returned 503 / timeouts on Oct 13.
 - Habit insights done (`src/habits.js`, `GET /api/habits`, shown in `npm run spikes`): one-off purchases in flexible categories that average 4+/month, appear in 3+ baseline months and average $30 or less, grouped by category + description; shows monthly/yearly cost and what halving saves. Seed now also marks food flexible (demo: coffee $69.22/month, food delivery $201.92/month).
+- Approval + PayPal action done (`src/approvals.js`, `src/paypal.js`, `public/index.html`): user approves one option in the page; server recomputes the amount (refuses if it changed), records the approval, then sends a PayPal sandbox Payout to `SAVINGS_RECEIVER_EMAIL` with the approval id as `sender_batch_id`. One plan per category per month. Verified Oct 13: $40.64 and $27.09 payouts SUCCESS (the second exposed the one-plan rule, since fixed).
 
 ## Roadmap
 **Week 1 (Oct 13-19):** finish sandbox setup and test order; optionally create US sandbox accounts; repo, license, `.gitignore`.
@@ -80,4 +81,4 @@ Technological Implementation, Design, Potential Impact, Innovation, Presentation
 Aim for the "Best Use of Agentic Commerce" and "Best Use of PayPal + AI" honorable mentions.
 
 ## Next task
-Approval button + PayPal action: user approves one savings option; only then the agent moves the saved amount via PayPal sandbox Payouts. Also: run `npm run categorize` once Gemini is available and record the accuracy.
+Dashboard UI (React, Week 3), replacing the plain approve page. Also: run `npm run categorize` once Gemini is available and record the accuracy; clear the approvals table before recording the demo.

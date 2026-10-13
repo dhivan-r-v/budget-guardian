@@ -75,15 +75,18 @@ async function api(path, options) {
   return body;
 }
 
-function liveApproval(optionId) {
-  return approvals.find((a) => a.optionId === optionId && a.month === month && a.status !== 'failed');
+// A category's options are alternatives, so one live approval covers the whole category.
+function liveApproval(category) {
+  return approvals.find((a) => a.category === category && a.month === month && a.status !== 'failed');
 }
 
 function optionRow(category, text, option) {
   const row = el('div', { class: 'option' }, el('span', { textContent: text }));
-  const live = liveApproval(option.id);
-  if (live) {
+  const live = liveApproval(category);
+  if (live?.optionId === option.id) {
     row.append(el('span', { class: `status ${live.status}`, textContent: `${STATUS_TEXT[live.status]} · ${usd(live.amountCents)}` }));
+  } else if (live) {
+    row.append(el('span', { class: 'muted', textContent: `You chose another plan for ${category} this month` }));
   } else if (option.savingsCents > 0) {
     const button = el('button', { textContent: `Approve · save ${usd(option.savingsCents)}` });
     button.onclick = () => askToConfirm(row, button, option);

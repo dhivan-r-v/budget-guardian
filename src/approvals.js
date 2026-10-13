@@ -102,9 +102,14 @@ export async function approve(db, { optionId, expectedAmountCents, asOf } = {}, 
     throw new ApprovalError(409, `the amount changed to ${usd(amountCents)}; please review it again`, { amountCents });
   }
 
-  // Check and insert run without awaiting in between, so two clicks can't both get here.
-  const live = db.prepare("SELECT * FROM approvals WHERE option_id = ? AND month = ? AND status != 'failed'").get(optionId, month);
-  if (live) return { approval: toApproval(live), duplicate: true };
+  // A category's options are alternatives (2 or 3 transit days, not both), so each category
+  // gets one live plan per month. Check and insert run without awaiting in between, so two
+  // clicks can't both get past here.
+  const live = db.prepare("SELECT * FROM approvals WHERE category = ? AND month = ? AND status != 'failed'").get(category, month);
+  if (live?.option_id === optionId) return { approval: toApproval(live), duplicate: true };
+  if (live) {
+    throw new ApprovalError(409, `you already approved a ${category} plan this month: ${live.description}`, { approvalId: live.id });
+  }
   const id = randomUUID();
   db.prepare(`
     INSERT INTO approvals (id, option_id, category, month, description, amount_cents, receiver, status)
