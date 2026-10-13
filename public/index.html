@@ -32,6 +32,11 @@
   .option span { flex: 1 1 260px; }
   button { font: inherit; border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; background: var(--accent); color: var(--accent-text); white-space: nowrap; }
   button:disabled { opacity: 0.6; cursor: default; }
+  button.secondary { background: var(--pill); color: var(--text); }
+  button[hidden] { display: none; }
+  .confirm { flex: 1 1 100%; background: var(--pill); border-radius: 8px; padding: 12px; }
+  .confirm p { margin: 0 0 10px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .status { font-size: 0.9rem; white-space: nowrap; }
   .status.completed { color: var(--ok); } .status.sent, .status.approved { color: var(--warn); } .status.failed { color: var(--bad); }
   .muted { color: var(--muted); font-size: 0.9rem; }
@@ -81,10 +86,23 @@ function optionRow(category, text, option) {
     row.append(el('span', { class: `status ${live.status}`, textContent: `${STATUS_TEXT[live.status]} · ${usd(live.amountCents)}` }));
   } else if (option.savingsCents > 0) {
     const button = el('button', { textContent: `Approve · save ${usd(option.savingsCents)}` });
-    button.onclick = () => approveOption(button, text, option);
+    button.onclick = () => askToConfirm(row, button, option);
     row.append(button);
   }
   return row;
+}
+
+// In-page confirmation (browser confirm() dialogs can be blocked silently).
+function askToConfirm(row, button, option) {
+  button.hidden = true;
+  row.querySelector('.confirm')?.remove();
+  const yes = el('button', { textContent: `Yes, move ${usd(option.savingsCents)} to savings` });
+  const no = el('button', { textContent: 'Cancel', class: 'secondary' });
+  const message = el('p', { class: 'muted', textContent: `Budget Guardian will send ${usd(option.savingsCents)} to your savings account through PayPal. Nothing else will happen.` });
+  const box = el('div', { class: 'confirm' }, message, el('div', { class: 'actions' }, yes, no));
+  no.onclick = () => { box.remove(); button.hidden = false; };
+  yes.onclick = () => approveOption(box, yes, no, option);
+  row.append(box);
 }
 
 function adviceCard(item) {
@@ -100,11 +118,10 @@ function adviceCard(item) {
   return card;
 }
 
-async function approveOption(button, text, option) {
-  const ok = confirm(`${text}\n\nBudget Guardian will move ${usd(option.savingsCents)} to your savings account through PayPal. Nothing else will happen.\n\nApprove?`);
-  if (!ok) return;
-  button.disabled = true;
-  button.textContent = 'Approving…';
+async function approveOption(box, yes, no, option) {
+  yes.disabled = no.disabled = true;
+  yes.textContent = 'Approving…';
+  box.querySelector('.error')?.remove();
   try {
     const approval = await api('/api/approvals', {
       method: 'POST',
@@ -115,8 +132,14 @@ async function approveOption(button, text, option) {
     await load();
     poll(approval.id);
   } catch (err) {
-    alert(err.status === 409 ? `${err.message}. The page will refresh with the new figures.` : `Could not approve: ${err.message}`);
-    load();
+    if (err.status === 409) {
+      box.append(el('p', { class: 'error', textContent: `${err.message}. Refreshing with the new figures…` }));
+      setTimeout(load, 2500);
+      return;
+    }
+    box.append(el('p', { class: 'error', textContent: `Not approved: ${err.message}` }));
+    yes.disabled = no.disabled = false;
+    yes.textContent = `Yes, move ${usd(option.savingsCents)} to savings`;
   }
 }
 
