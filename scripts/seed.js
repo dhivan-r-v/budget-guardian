@@ -141,7 +141,7 @@ try {
   }
   // The demo user's choice of flexible categories; never overrides a choice already made.
   const pref = db.prepare('INSERT OR IGNORE INTO category_prefs (category, flexible) VALUES (?, 1)');
-  for (const category of ['fuel', 'entertainment']) pref.run(category);
+  for (const category of ['fuel', 'entertainment', 'food']) pref.run(category);
   db.exec('COMMIT');
 } catch (err) {
   db.exec('ROLLBACK');
