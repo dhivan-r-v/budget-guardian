@@ -12,7 +12,8 @@
     "seed": "node scripts/seed.js",
     "spikes": "node scripts/spikes.js",
     "test": "node --test",
-    "advice": "node --env-file-if-exists=.env scripts/advice.js"
+    "advice": "node --env-file-if-exists=.env scripts/advice.js",
+    "categorize": "node --env-file-if-exists=.env scripts/categorize.js"
   },
   "dependencies": {
     "@google/genai": "^2.29.0",

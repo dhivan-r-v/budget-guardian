@@ -4,6 +4,7 @@ import { detectSpikes } from './src/spikes.js';
 import { explainSpikes } from './src/causes.js';
 import { suggestSavings, suggestSavingsForSpikes, setFlexible } from './src/savings.js';
 import { adviseCategory, adviseSpikes } from './src/advisor.js';
+import { categorize, accuracy } from './src/categorizer.js';
 
 const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_BASE_URL, PORT = 3000 } = process.env;
 if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
@@ -133,6 +134,16 @@ app.get('/api/advice', async (req, res, next) => {
       if (entry) others.push({ ...entry, ...(await adviseCategory(db, report, entry)) });
     }
     res.json({ ...result, others });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Labels uncategorized transactions with the LLM. Safe to call repeatedly: only
+// unlabeled transactions are sent, and failures leave them for the next call.
+app.post('/api/categorize', async (req, res, next) => {
+  try {
+    res.json({ ...(await categorize(db)), accuracy: accuracy(db) });
   } catch (err) {
     next(err);
   }
