@@ -6,6 +6,8 @@ import { suggestSavings, suggestSavingsForSpikes, setFlexible } from './src/savi
 import { adviseCategory, adviseSpikes } from './src/advisor.js';
 import { categorize, accuracy } from './src/categorizer.js';
 import { habitInsights } from './src/habits.js';
+import { getAccessToken, paypal } from './src/paypal.js';
+import { ApprovalError, approve, retry, refresh, getApproval, listApprovals } from './src/approvals.js';
 
 const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_BASE_URL, PORT = 3000 } = process.env;
 if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
@@ -16,43 +18,7 @@ if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
 const db = openDb();
 const app = express();
 app.use(express.json());
-
-// Access tokens last ~9 hours; reuse one until shortly before it expires.
-let cachedToken = null;
-async function getAccessToken() {
-  if (cachedToken && Date.now() < cachedToken.expiresAt) return cachedToken.value;
-
-  const auth = Buffer.from(`${PAYPAL_CLIENT_ID.trim()}:${PAYPAL_CLIENT_SECRET.trim()}`).toString('base64');
-  const res = await fetch(`${PAYPAL_BASE_URL}/v1/oauth2/token`, {
-    method: 'POST',
-    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'grant_type=client_credentials',
-  });
-  const data = await res.json();
-  if (!res.ok) throw new PayPalError(res.status, data);
-
-  cachedToken = { value: data.access_token, expiresAt: Date.now() + (data.expires_in - 60) * 1000 };
-  return cachedToken.value;
-}
-
-class PayPalError extends Error {
-  constructor(status, details) {
-    super(details?.error_description ?? details?.message ?? `PayPal request failed (${status})`);
-    this.status = status;
-    this.details = details;
-  }
-}
-
-async function paypal(method, path, body) {
-  const res = await fetch(`${PAYPAL_BASE_URL}${path}`, {
-    method,
-    headers: { Authorization: `Bearer ${await getAccessToken()}`, 'Content-Type': 'application/json' },
-    body: body && JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new PayPalError(res.status, data);
-  return data;
-}
+app.use(express.static('public'));
 
 // Confirms the credentials work. Never returns the token itself.
 app.get('/api/test-token', async (req, res, next) => {
@@ -139,6 +105,38 @@ app.get('/api/advice', async (req, res, next) => {
     next(err);
   }
 });
+
+// --- Approvals: the only way money moves.
+// Body: { optionId, expectedAmountCents, confirm: true, asOf? }. The server recomputes the
+// amount and refuses if it differs from what the user saw.
+const approvalRoute = (handler) => async (req, res, next) => {
+  try {
+    await handler(req, res);
+  } catch (err) {
+    if (err instanceof ApprovalError) return res.status(err.status).json({ error: err.message, details: err.details });
+    next(err);
+  }
+};
+
+app.post('/api/approvals', approvalRoute(async (req, res) => {
+  const { optionId, expectedAmountCents, confirm, asOf } = req.body ?? {};
+  if (confirm !== true) throw new ApprovalError(400, 'approval must be confirmed by the user (confirm: true)');
+  if (asOf !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(asOf))) throw new ApprovalError(400, 'asOf must be YYYY-MM-DD');
+  const { approval, duplicate } = await approve(db, { optionId, expectedAmountCents, asOf });
+  res.status(duplicate ? 200 : 201).json({ ...approval, duplicate });
+}));
+
+app.get('/api/approvals', (req, res) => res.json(listApprovals(db)));
+
+// Returns the approval, first refreshing a sent payout's status from PayPal.
+app.get('/api/approvals/:id', approvalRoute(async (req, res) => {
+  if (!getApproval(db, req.params.id)) throw new ApprovalError(404, 'approval not found');
+  res.json(await refresh(db, req.params.id));
+}));
+
+app.post('/api/approvals/:id/retry', approvalRoute(async (req, res) => {
+  res.json(await retry(db, req.params.id));
+}));
 
 // Small, frequent purchases from past months in flexible categories, with cut-back savings.
 app.get('/api/habits', (req, res) => {
