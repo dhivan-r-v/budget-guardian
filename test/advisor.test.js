@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
 import { detectSpikes } from '../src/spikes.js';
 import { setFlexible } from '../src/savings.js';
-import { adviseCategory, adviseSpikes, templateAdvice, validateAdvice, usd } from '../src/advisor.js';
+import { adviseCategory, adviseSpikes, templateAdvice, validateAdvice, usd, backgroundIdle } from '../src/advisor.js';
 
 let seq = 0;
 function fuelSpikeDb() {
@@ -144,4 +144,33 @@ test('adviseSpikes adds cause, savings and advice to every spike', async () => {
   assert.equal(fuel.cause.primaryCause, 'more_often');
   assert.equal(fuel.savings.options.length, 2);
   assert.equal(fuel.advice.options.length, 2);
+});
+
+test('with wait: false, an uncached answer never blocks and is ready on the next load', async () => {
+  const { db, report, entry } = setup();
+  const { facts } = await adviseCategory(db, report, entry, { useAI: false });
+  const generate = fakeGenerate(goodResponse(facts));
+
+  const first = await adviseCategory(db, report, entry, { useAI: true, generate, wait: false });
+  assert.equal(first.advice.source, 'template');
+  assert.equal(first.advice.pending, true);
+  await backgroundIdle();
+
+  const second = await adviseCategory(db, report, entry, { useAI: true, generate, wait: false });
+  assert.equal(second.advice.source, 'ai');
+  assert.equal(second.advice.cached, true);
+  assert.equal(generate.calls, 1);
+});
+
+test('with wait: false, a failure is not retried on every load', async () => {
+  const db = fuelSpikeDb();
+  // A different asOf gives different facts, so this test has its own cache key.
+  const report = detectSpikes(db, { asOf: '2026-10-12' });
+  const generate = fakeGenerate(new Error('503 high demand'));
+  await adviseCategory(db, report, report.spikes[0], { useAI: true, generate, wait: false });
+  await backgroundIdle();
+  const again = await adviseCategory(db, report, report.spikes[0], { useAI: true, generate, wait: false });
+  assert.equal(again.advice.source, 'template');
+  assert.match(again.advice.aiError, /503/);
+  assert.equal(generate.calls, 1);
 });

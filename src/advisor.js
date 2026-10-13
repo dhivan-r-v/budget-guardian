@@ -194,8 +194,54 @@ const SCHEMA = {
   required: ['headline', 'explanation', 'options'],
 };
 
-// Advice for one category entry from detectSpikes(). `generate` and `useAI` are injectable for tests.
-export async function adviseCategory(db, report, entry, { generate = generateJson, useAI = aiAvailable() } = {}) {
+// Asks the LLM, validates, and caches. Returns the advice, or throws the last error.
+async function generateAdvice(db, key, facts, generate) {
+  let lastError;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    // An API error (overloaded, quota) propagates: it won't clear up within a request,
+    // and retrying only burns quota. Only invalid answers are retried.
+    const out = await generate({ system: SYSTEM, prompt: `FACTS:\n${JSON.stringify(facts, null, 2)}`, schema: SCHEMA });
+    const errors = validateAdvice(out, facts);
+    if (errors.length) {
+      lastError = new Error(errors.join('; '));
+      continue;
+    }
+    // Keep only the expected fields, with options in the same order as the facts.
+    const textById = new Map(out.options.map((o) => [o.id, o.text.trim()]));
+    const advice = {
+      headline: out.headline.trim(),
+      explanation: out.explanation.trim(),
+      options: facts.options.map((o) => ({ id: o.id, text: textById.get(o.id) })),
+    };
+    db.prepare('INSERT OR REPLACE INTO ai_cache (key, model, response) VALUES (?, ?, ?)').run(key, AI_MODEL, JSON.stringify(advice));
+    return advice;
+  }
+  throw lastError;
+}
+
+// Background generation for wait: false. One request per facts at a time, and after a
+// failure that facts waits RETRY_AFTER_MS before trying again, so a page that refreshes
+// often never hammers a struggling free tier.
+const RETRY_AFTER_MS = 2 * 60_000;
+const inFlight = new Map(); // key -> promise
+const lastFailure = new Map(); // key -> { at, message }
+
+function generateInBackground(db, key, facts, generate) {
+  if (inFlight.has(key)) return;
+  const failed = lastFailure.get(key);
+  if (failed && Date.now() - failed.at < RETRY_AFTER_MS) return;
+  const p = generateAdvice(db, key, facts, generate)
+    .then(() => lastFailure.delete(key))
+    .catch((err) => lastFailure.set(key, { at: Date.now(), message: err.message }))
+    .finally(() => inFlight.delete(key));
+  inFlight.set(key, p);
+}
+
+// Advice for one category entry from detectSpikes(). With wait: false (the dashboard),
+// an uncached answer never blocks: code-written text is returned at once and the LLM
+// answer is generated in the background for the next load. `generate` and `useAI` are
+// injectable for tests.
+export async function adviseCategory(db, report, entry, { generate = generateJson, useAI = aiAvailable(), wait = true } = {}) {
   const cause = entry.isSpike ? explainSpike(db, report, entry) : null;
   const savings = suggestSavings(db, report, entry);
   const facts = buildFacts(report, entry, cause, savings);
@@ -207,32 +253,21 @@ export async function adviseCategory(db, report, entry, { generate = generateJso
   const cached = db.prepare('SELECT response FROM ai_cache WHERE key = ?').get(key);
   if (cached) return { ...base, advice: { ...JSON.parse(cached.response), source: 'ai', model: AI_MODEL, cached: true } };
 
-  let lastError;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    try {
-      const out = await generate({ system: SYSTEM, prompt: `FACTS:\n${JSON.stringify(facts, null, 2)}`, schema: SCHEMA });
-      const errors = validateAdvice(out, facts);
-      if (errors.length) {
-        lastError = errors.join('; ');
-        continue;
-      }
-      // Keep only the expected fields, with options in the same order as the facts.
-      const textById = new Map(out.options.map((o) => [o.id, o.text.trim()]));
-      const advice = {
-        headline: out.headline.trim(),
-        explanation: out.explanation.trim(),
-        options: facts.options.map((o) => ({ id: o.id, text: textById.get(o.id) })),
-      };
-      db.prepare('INSERT OR REPLACE INTO ai_cache (key, model, response) VALUES (?, ?, ?)').run(key, AI_MODEL, JSON.stringify(advice));
-      return { ...base, advice: { ...advice, source: 'ai', model: AI_MODEL, cached: false } };
-    } catch (err) {
-      // API errors (overloaded, quota) won't clear up within a request; retrying only burns quota.
-      lastError = err.message;
-      break;
-    }
+  if (!wait) {
+    generateInBackground(db, key, facts, generate);
+    const failed = lastFailure.get(key);
+    return { ...base, advice: { ...fallback, source: 'template', pending: inFlight.has(key), ...(failed && { aiError: failed.message }) } };
   }
-  return { ...base, advice: { ...fallback, source: 'template', aiError: lastError } };
+  try {
+    const advice = await generateAdvice(db, key, facts, generate);
+    return { ...base, advice: { ...advice, source: 'ai', model: AI_MODEL, cached: false } };
+  } catch (err) {
+    return { ...base, advice: { ...fallback, source: 'template', aiError: err.message } };
+  }
 }
+
+// Waits for background generations to finish (for tests and scripts).
+export const backgroundIdle = () => Promise.all([...inFlight.values()]);
 
 // Advice for every spike in a detectSpikes() report.
 export async function adviseSpikes(db, report, opts) {
