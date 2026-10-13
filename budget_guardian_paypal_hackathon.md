@@ -55,6 +55,7 @@ PORT=3000
 - Seed script done: `npm run seed` writes 5 months to SQLite (`data/budget-guardian.db`) with a fuel spike in the latest month.
 
 - Spike detector done (`src/spikes.js`, `GET /api/spikes`, `npm run spikes`, `npm test`). Projection = spent so far + usual spending for the rest of the month; spike = 30%+ and $25+ above the usual monthly average.
+- Cause step done (`src/causes.js`): splits a spike exactly into more often / higher prices / recurring changes, flags large purchases; included in `GET /api/spikes`.
 
 ## Roadmap
 **Week 1 (Oct 13-19):** finish sandbox setup and test order; optionally create US sandbox accounts; repo, license, `.gitignore`.
@@ -75,4 +76,4 @@ Technological Implementation, Design, Potential Impact, Innovation, Presentation
 Aim for the "Best Use of Agentic Commerce" and "Best Use of PayPal + AI" honorable mentions.
 
 ## Next task
-Attribute the cause of a spike (which purchases / how many more than usual), then the savings + CO2 calculator.
+Savings + CO2 calculator (plain code), using the cause breakdown from `src/causes.js`.

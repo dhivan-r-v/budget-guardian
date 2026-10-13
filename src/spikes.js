@@ -104,6 +104,10 @@ export function detectSpikes(
       projectedCents,
       increaseCents,
       increasePct,
+      recurringCents: c.recurring,
+      oneOffCents: c.oneOff,
+      usualRecurringCents,
+      usualOneOffCents,
       transactionCount: c.count,
       baselineAvgTransactionCount: nBase ? Math.round((c.baseCount / nBase) * 10) / 10 : 0,
       // Spent more so far than in a usual whole month.

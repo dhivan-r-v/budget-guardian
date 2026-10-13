@@ -1,6 +1,7 @@
 import express from 'express';
 import { openDb } from './src/db.js';
 import { detectSpikes } from './src/spikes.js';
+import { explainSpikes } from './src/causes.js';
 
 const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_BASE_URL, PORT = 3000 } = process.env;
 if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
@@ -92,7 +93,7 @@ app.get('/api/spikes', (req, res) => {
     return res.status(400).json({ error: 'asOf must be YYYY-MM-DD' });
   }
   try {
-    res.json(detectSpikes(db, asOf ? { asOf } : {}));
+    res.json(explainSpikes(db, detectSpikes(db, asOf ? { asOf } : {})));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
