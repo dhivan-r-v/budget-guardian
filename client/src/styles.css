@@ -72,6 +72,7 @@ button { font: inherit; }
 .month { color: var(--ink-2); font-size: 0.9rem; min-width: 220px; }
 .progress { height: 6px; background: var(--surface-2); border-radius: 999px; margin-top: 6px; overflow: hidden; }
 .progress > span { display: block; height: 100%; background: var(--series-1); border-radius: 999px; }
+.badges { display: flex; flex-wrap: wrap; gap: 8px; }
 .promise { display: inline-flex; gap: 6px; align-items: center; font-size: 0.85rem; color: var(--ink-2); background: var(--surface); border: 1px solid var(--ring); border-radius: 999px; padding: 4px 10px; }
 
 /* Cards & layout */

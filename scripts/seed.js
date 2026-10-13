@@ -1,6 +1,6 @@
 // Seeds realistic spending history, since PayPal sandbox accounts start empty.
 //
-// Usage: node scripts/seed.js [--months 5] [--end YYYY-MM-DD] [--seed 42]
+// Usage: node scripts/seed.js [--months 5] [--end YYYY-MM-DD] [--seed 42] [--if-empty]
 //
 // Generates `months` calendar months ending with the month of `end` (default: today).
 // The last month only contains transactions up to `end`, like a real in-progress month.
@@ -14,7 +14,8 @@ import { openDb, DB_PATH } from '../src/db.js';
 const { values: args } = parseArgs({
   options: {
     months: { type: 'string', default: '5' },
-    end: { type: 'string', default: new Date().toISOString().slice(0, 10) },
+    end: { type: 'string', default: process.env.DEMO_AS_OF?.trim() || new Date().toISOString().slice(0, 10) },
+    'if-empty': { type: 'boolean', default: false }, // only seed a database with no transactions
     seed: { type: 'string', default: '42' },
   },
 });
@@ -128,6 +129,10 @@ for (let offset = MONTHS - 1; offset >= 0; offset--) {
 }
 
 const db = openDb();
+if (args['if-empty'] && db.prepare('SELECT COUNT(*) AS n FROM transactions').get().n > 0) {
+  console.log(`Database at ${DB_PATH} already has transactions; not seeding.`);
+  process.exit(0);
+}
 const insert = db.prepare(`
   INSERT INTO transactions
     (id, occurred_at, amount_cents, currency, merchant, description, source, seed_category, seed_recurring)

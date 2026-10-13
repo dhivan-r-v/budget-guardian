@@ -9,13 +9,14 @@
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
-    "build": "npm --prefix client ci && npm --prefix client run build",
+    "build": "npm --prefix client ci --include=dev && npm --prefix client run build",
     "dev:client": "npm --prefix client run dev",
     "seed": "node scripts/seed.js",
     "spikes": "node scripts/spikes.js",
     "advice": "node --env-file-if-exists=.env scripts/advice.js",
     "categorize": "node --env-file-if-exists=.env scripts/categorize.js",
-    "test": "node --test"
+    "test": "node --test",
+    "reset-demo": "node scripts/reset-demo.js"
   },
   "dependencies": {
     "@google/genai": "^2.29.0",

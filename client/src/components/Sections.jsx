@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { api, usd, monthLong, capitalize, STATUS_TEXT } from '../api.js';
+import { api, usd, monthLong, dateLong, capitalize, STATUS_TEXT } from '../api.js';
 
-export function Header({ month, daysElapsed, daysInMonth }) {
+export function Header({ month, daysElapsed, daysInMonth, demo, asOf }) {
   return (
     <header className="top">
       <div className="brand">
@@ -16,7 +16,10 @@ export function Header({ month, daysElapsed, daysInMonth }) {
         {monthLong(month)} · day {daysElapsed} of {daysInMonth}
         <div className="progress" aria-hidden="true"><span style={{ width: `${(daysElapsed / daysInMonth) * 100}%` }} /></div>
       </div>
-      <span className="promise">🔒 Nothing moves until you approve</span>
+      <div className="badges">
+        {demo && <span className="promise" title="Seeded demo transactions and PayPal sandbox money; no real accounts.">Sandbox demo · data as of {dateLong(asOf)}</span>}
+        <span className="promise">🔒 Nothing moves until you approve</span>
+      </div>
     </header>
   );
 }

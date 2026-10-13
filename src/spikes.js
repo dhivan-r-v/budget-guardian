@@ -13,6 +13,9 @@
 
 const DAY_MS = 86_400_000;
 
+// "Today", unless DEMO_AS_OF pins it (the deployed demo's seed data is built around one date).
+export const today = () => process.env.DEMO_AS_OF?.trim() || new Date().toISOString().slice(0, 10);
+
 function parseISODate(s) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error(`asOf must be YYYY-MM-DD, got "${s}"`);
   const d = new Date(`${s}T00:00:00Z`);
@@ -29,7 +32,7 @@ function addMonths(ym, n) {
 export function detectSpikes(
   db,
   {
-    asOf = new Date().toISOString().slice(0, 10),
+    asOf = today(),
     lookbackMonths = 6, // at most this many previous months form the baseline
     threshold = 0.3, // flag when projected spending is 30%+ above the usual average
     minIncreaseCents = 2500, // ...and at least $25 above it, so tiny categories don't alert
@@ -119,6 +122,7 @@ export function detectSpikes(
 
   return {
     asOf,
+    demo: Boolean(process.env.DEMO_AS_OF?.trim()),
     month,
     daysElapsed,
     daysInMonth,

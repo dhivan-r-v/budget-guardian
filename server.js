@@ -22,6 +22,12 @@ app.use(express.json());
 // The React dashboard's production build (npm run build).
 app.use(express.static('client/dist'));
 
+// For Render's health check: the server is up and the database answers.
+app.get('/api/health', (req, res) => {
+  db.prepare('SELECT 1').get();
+  res.json({ ok: true, demoAsOf: process.env.DEMO_AS_OF?.trim() || null });
+});
+
 // Confirms the credentials work. Never returns the token itself.
 app.get('/api/test-token', async (req, res, next) => {
   try {
@@ -155,7 +161,10 @@ app.get('/api/habits', (req, res) => {
 
 // Labels uncategorized transactions with the LLM. Safe to call repeatedly: only
 // unlabeled transactions are sent, and failures leave them for the next call.
+// Spends LLM quota, so on a public deployment (ADMIN_TOKEN set) it needs that token.
 app.post('/api/categorize', async (req, res, next) => {
+  const token = process.env.ADMIN_TOKEN?.trim();
+  if (token && req.get('Authorization') !== `Bearer ${token}`) return res.status(401).json({ error: 'admin token required' });
   try {
     res.json({ ...(await categorize(db)), accuracy: accuracy(db) });
   } catch (err) {

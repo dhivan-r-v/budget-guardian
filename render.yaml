@@ -1,0 +1,38 @@
+# Render Blueprint: one web service with a persistent disk for the SQLite database.
+# Deploy from the Render Dashboard: New > Blueprint > this repo. Render asks for every
+# `sync: false` value once; never put secrets in this file (the repo is public).
+services:
+  - type: web
+    name: budget-guardian
+    runtime: node
+    plan: 0.5c-512mb # smallest paid plan; the free plan has no persistent disk
+    region: singapore
+    buildCommand: npm ci && npm run build
+    # Seeds demo transactions only when the disk's database is still empty.
+    startCommand: node scripts/seed.js --if-empty && npm start
+    healthCheckPath: /api/health
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: DB_PATH
+        value: /var/data/budget-guardian.db
+      # The seeded demo is built around this date; the dashboard labels it as demo data.
+      - key: DEMO_AS_OF
+        value: "2026-10-13"
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: SAVINGS_RECEIVER_EMAIL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # Protects POST /api/categorize (spends LLM quota) on the public deployment.
+      - key: ADMIN_TOKEN
+        generateValue: true
