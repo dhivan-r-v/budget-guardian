@@ -6,6 +6,7 @@ import { suggestSavings, suggestSavingsForSpikes, setFlexible } from './src/savi
 import { adviseCategory, adviseSpikes } from './src/advisor.js';
 import { categorize, accuracy } from './src/categorizer.js';
 import { habitInsights } from './src/habits.js';
+import { monthlyHistory } from './src/history.js';
 import { getAccessToken, paypal } from './src/paypal.js';
 import { ApprovalError, approve, retry, refresh, getApproval, listApprovals } from './src/approvals.js';
 
@@ -18,7 +19,8 @@ if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
 const db = openDb();
 const app = express();
 app.use(express.json());
-app.use(express.static('public'));
+// The React dashboard's production build (npm run build).
+app.use(express.static('client/dist'));
 
 // Confirms the credentials work. Never returns the token itself.
 app.get('/api/test-token', async (req, res, next) => {
@@ -93,12 +95,13 @@ app.get('/api/advice', async (req, res, next) => {
   const report = reportFor(req, res);
   if (!report) return;
   try {
-    const result = await adviseSpikes(db, report);
+    // The dashboard never waits for the LLM: uncached text arrives on a later load.
+    const result = await adviseSpikes(db, report, { wait: false });
     const extra = [req.query.category ?? []].flat().filter((c) => !report.spikes.some((s) => s.category === c));
     const others = [];
     for (const category of extra) {
       const entry = report.categories.find((c) => c.category === category);
-      if (entry) others.push({ ...entry, ...(await adviseCategory(db, report, entry)) });
+      if (entry) others.push({ ...entry, ...(await adviseCategory(db, report, entry, { wait: false })) });
     }
     res.json({ ...result, others });
   } catch (err) {
@@ -137,6 +140,12 @@ app.get('/api/approvals/:id', approvalRoute(async (req, res) => {
 app.post('/api/approvals/:id/retry', approvalRoute(async (req, res) => {
   res.json(await retry(db, req.params.id));
 }));
+
+// Monthly totals per category for the dashboard charts.
+app.get('/api/history', (req, res) => {
+  const report = reportFor(req, res);
+  if (report) res.json(monthlyHistory(db, report));
+});
 
 // Small, frequent purchases from past months in flexible categories, with cut-back savings.
 app.get('/api/habits', (req, res) => {

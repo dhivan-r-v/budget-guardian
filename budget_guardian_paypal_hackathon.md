@@ -61,6 +61,7 @@ PORT=3000
 - Categorizer done (`src/categorizer.js`, `POST /api/categorize`, `npm run categorize [--reset]`): groups transactions by merchant + description (seed data = 32 groups = 1 request), code computes recurring evidence, LLM picks from a fixed category list, invalid labels ignored, complete batches cached, accuracy vs seed labels reported. Not yet run against Gemini: free tier returned 503 / timeouts on Oct 13.
 - Habit insights done (`src/habits.js`, `GET /api/habits`, shown in `npm run spikes`): one-off purchases in flexible categories that average 4+/month, appear in 3+ baseline months and average $30 or less, grouped by category + description; shows monthly/yearly cost and what halving saves. Seed now also marks food flexible (demo: coffee $69.22/month, food delivery $201.92/month).
 - Approval + PayPal action done (`src/approvals.js`, `src/paypal.js`, `public/index.html`): user approves one option in the page; server recomputes the amount (refuses if it changed), records the approval, then sends a PayPal sandbox Payout to `SAVINGS_RECEIVER_EMAIL` with the approval id as `sender_batch_id`. One plan per category per month. Verified Oct 13: $40.64 and $27.09 payouts SUCCESS (the second exposed the one-plan rule, since fixed).
+- React dashboard done (`client/`, Vite + React 18, served by Express from `client/dist`): headline overspend, summary tiles, monthly chart per category (so far + projected vs usual, hover + table view), cause breakdown bar, approve flow, habits, approvals, flexible-category switches. Validated palette, light/dark, works at 375px. Advice endpoint no longer waits for the LLM (template now, AI text on a later load).
 
 ## Roadmap
 **Week 1 (Oct 13-19):** finish sandbox setup and test order; optionally create US sandbox accounts; repo, license, `.gitignore`.
@@ -81,4 +82,4 @@ Technological Implementation, Design, Potential Impact, Innovation, Presentation
 Aim for the "Best Use of Agentic Commerce" and "Best Use of PayPal + AI" honorable mentions.
 
 ## Next task
-Dashboard UI (React, Week 3), replacing the plain approve page. Also: run `npm run categorize` once Gemini is available and record the accuracy; clear the approvals table before recording the demo.
+Deploy to Render (Week 4: persistent disk for SQLite, env vars, build = `npm ci && npm run build`). Also: run `npm run categorize` once Gemini is available and record the accuracy; clear the approvals table before recording the demo.
