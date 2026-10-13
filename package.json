@@ -1,0 +1,17 @@
+{
+  "name": "budget-guardian",
+  "version": "0.1.0",
+  "description": "AI agent that watches PayPal spending, explains spikes, and suggests approved-only trade-offs.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "seed": "node scripts/seed.js"
+  },
+  "dependencies": {
+    "express": "^5.3.0"
+  }
+}
