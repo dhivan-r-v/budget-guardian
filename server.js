@@ -2,6 +2,7 @@ import express from 'express';
 import { openDb } from './src/db.js';
 import { detectSpikes } from './src/spikes.js';
 import { explainSpikes } from './src/causes.js';
+import { suggestSavings, suggestSavingsForSpikes, setFlexible } from './src/savings.js';
 
 const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_BASE_URL, PORT = 3000 } = process.env;
 if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
@@ -86,17 +87,58 @@ app.post('/api/capture-order/:orderId', async (req, res, next) => {
   }
 });
 
-// Optional ?asOf=YYYY-MM-DD to view the report as of another day (defaults to today).
-app.get('/api/spikes', (req, res) => {
+// Builds the spike report from an optional ?asOf=YYYY-MM-DD (defaults to today).
+// Sends a 400 and returns null on bad input.
+function reportFor(req, res) {
   const { asOf } = req.query;
   if (asOf !== undefined && (typeof asOf !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(asOf))) {
-    return res.status(400).json({ error: 'asOf must be YYYY-MM-DD' });
+    res.status(400).json({ error: 'asOf must be YYYY-MM-DD' });
+    return null;
   }
   try {
-    res.json(explainSpikes(db, detectSpikes(db, asOf ? { asOf } : {})));
+    return detectSpikes(db, asOf ? { asOf } : {});
   } catch (err) {
     res.status(400).json({ error: err.message });
+    return null;
   }
+}
+
+// Spikes with their causes and savings options.
+app.get('/api/spikes', (req, res) => {
+  const report = reportFor(req, res);
+  if (report) res.json(suggestSavingsForSpikes(db, explainSpikes(db, report)));
+});
+
+// Savings options for one category, spiking or not: ?category=entertainment
+app.get('/api/savings', (req, res) => {
+  const report = reportFor(req, res);
+  if (!report) return;
+  const entry = report.categories.find((c) => c.category === req.query.category);
+  if (!entry) return res.status(404).json({ error: `no spending found in category "${req.query.category}"` });
+  res.json(suggestSavings(db, report, entry));
+});
+
+// Every category seen in transactions, with whether the user marked it flexible.
+app.get('/api/categories', (req, res) => {
+  res.json(
+    db
+      .prepare(`
+        SELECT DISTINCT COALESCE(t.category, t.seed_category) AS category, COALESCE(p.flexible, 0) AS flexible
+        FROM transactions t
+        LEFT JOIN category_prefs p ON p.category = COALESCE(t.category, t.seed_category)
+        WHERE COALESCE(t.category, t.seed_category) IS NOT NULL
+        ORDER BY 1
+      `)
+      .all()
+      .map((r) => ({ category: r.category, flexible: Boolean(r.flexible) })),
+  );
+});
+
+// The user marks a category as flexible (willing to cut) or not: { "flexible": true }
+app.put('/api/categories/:category', (req, res) => {
+  if (typeof req.body?.flexible !== 'boolean') return res.status(400).json({ error: 'flexible must be true or false' });
+  setFlexible(db, req.params.category, req.body.flexible);
+  res.json({ category: req.params.category, flexible: req.body.flexible });
 });
 
 app.use((err, req, res, next) => {

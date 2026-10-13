@@ -139,6 +139,9 @@ try {
   for (const t of all) {
     insert.run(t.id, t.occurred_at, t.amount_cents, t.merchant, t.description, t.seed_category, t.seed_recurring);
   }
+  // The demo user's choice of flexible categories; never overrides a choice already made.
+  const pref = db.prepare('INSERT OR IGNORE INTO category_prefs (category, flexible) VALUES (?, 1)');
+  for (const category of ['fuel', 'entertainment']) pref.run(category);
   db.exec('COMMIT');
 } catch (err) {
   db.exec('ROLLBACK');
