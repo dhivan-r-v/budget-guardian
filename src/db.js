@@ -54,6 +54,13 @@ CREATE TABLE IF NOT EXISTS approvals (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_approvals_one_per_month
   ON approvals (option_id, month) WHERE status != 'failed';
 
+-- The user's own settings (e.g. monthly budget). Kept apart from sync_state, which the app
+-- writes on its own.
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 -- Small key/value state: last PayPal sync, how far PayPal's data is refreshed, the date the
 -- demo history was generated through.
 CREATE TABLE IF NOT EXISTS sync_state (

@@ -44,8 +44,10 @@ const ENTERTAINMENT_ONE_OFF = [
   ['Ticketmaster', 'Concert ticket', 4500, 8500],
   ["Dave & Buster's", 'Arcade night', 2000, 4000],
 ];
-// The demo user's choice of flexible categories.
+// The demo user's choices: flexible categories, and a monthly budget a bit above their
+// usual month (~$965), so a spike is what pushes the month over.
 export const DEMO_FLEXIBLE = ['fuel', 'entertainment', 'food'];
+export const DEMO_BUDGET_CENTS = 110000;
 
 const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
 const pad = (n) => String(n).padStart(2, '0');
@@ -126,6 +128,7 @@ export function seedDemo(db, opts) {
     // Never overrides a choice the user already made.
     const pref = db.prepare('INSERT OR IGNORE INTO category_prefs (category, flexible) VALUES (?, 1)');
     for (const category of DEMO_FLEXIBLE) pref.run(category);
+    db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('monthly_budget_cents', ?)").run(String(DEMO_BUDGET_CENTS));
     db.exec('COMMIT');
   } catch (err) {
     db.exec('ROLLBACK');
