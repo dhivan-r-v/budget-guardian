@@ -168,6 +168,40 @@ export async function categorize(db, { generate = generateJson, useAI = aiAvaila
   return result;
 }
 
+// Fallback for real PayPal transactions when the LLM can't label them (no key, overloaded):
+// obvious merchant names only, so a sandbox purchase at "Shell" still counts toward fuel.
+// Anything unmatched stays unlabeled for the LLM's next run. Never recurring.
+const RULES = [
+  ['fuel', /\b(shell|chevron|exxon|mobil|bp|texaco|valero|sunoco|citgo|arco|marathon|speedway|gas station|fuel|petrol)\b/i],
+  ['entertainment', /\b(netflix|spotify|hulu|disney|youtube|steam|xbox|playstation|nintendo|cinema|theat(er|re)s?|amc|ticketmaster|concert)\b/i],
+  ['food', /\b(starbucks|dunkin|coffee|cafe|restaurant|pizza|domino'?s|chipotle|mcdonald'?s|subway|doordash|uber ?eats|grubhub|grocer(y|ies)|trader joe'?s|kroger|aldi|whole foods)\b/i],
+  ['transport', /\b(uber|lyft|metro|transit|parking|train|bus)\b/i],
+  ['shopping', /\b(amazon|target|walmart|best ?buy|ebay|etsy|ikea|h&m|zara)\b/i],
+];
+export function ruleLabel(merchant, description = '') {
+  const text = `${merchant} ${description ?? ''}`;
+  return RULES.find(([, re]) => re.test(text))?.[0] ?? null;
+}
+
+export function labelPayPalByRules(db) {
+  const rows = db
+    .prepare(`
+      SELECT merchant, COALESCE(description, '') AS description FROM transactions
+      WHERE source = 'paypal' AND category IS NULL GROUP BY merchant, COALESCE(description, '')
+    `)
+    .all();
+  const update = db.prepare(`
+    UPDATE transactions SET category = ?, is_recurring = 0
+    WHERE source = 'paypal' AND category IS NULL AND merchant = ? AND COALESCE(description, '') = ?
+  `);
+  let labeled = 0;
+  for (const r of rows) {
+    const category = ruleLabel(r.merchant, r.description);
+    if (category) labeled += Number(update.run(category, r.merchant, r.description).changes);
+  }
+  return labeled;
+}
+
 // How well the LLM labels match the seed's ground truth (seed transactions only).
 export function accuracy(db) {
   const row = db

@@ -22,10 +22,13 @@ To work on the dashboard with live reload, run `npm start` and `npm run dev:clie
 
 ## How it works
 
+0. **Ingest.** Spending comes from your PayPal account (Transaction Search, synced every 15 minutes) on top of seeded history. Only completed outgoing payments count: money coming in, PayPal's holds and Budget Guardian's own savings transfers are skipped. An LLM labels each new merchant (100% category and recurring accuracy on the 180 seeded transactions), with name rules as a fallback.
 1. **Detect.** Plain code projects each category's month (spent so far + usual spending for the rest of the month) and flags categories heading 30%+ and $25+ above their usual month.
 2. **Explain.** Code splits the increase exactly into more purchases, higher prices and subscription changes. An LLM writes the friendly text around those figures; any number it adds or changes is rejected.
 3. **Suggest.** Only for categories you mark as flexible: public transport days for fuel (money and kg CO2), skipping subscriptions not billed yet, cutting back. Habits show small, frequent purchases and what halving them saves.
 4. **Approve, then act.** Nothing happens until you approve one plan. The server recomputes the amount, records the approval, and only then moves it to your savings account with a PayPal Payout, which can never be paid twice.
+
+To show a live purchase in the sandbox: `npm run demo-purchase -- --to <merchant sandbox email> --amount 48.20 --what "Fuel purchase"`, then `npm run sync` (PayPal can take up to ~3 hours to report it).
 
 `npm test` runs the test suite. `npm run spikes`, `npm run advice` and `npm run categorize` print each step from the command line.
 

@@ -8,8 +8,8 @@ services:
     plan: 0.5c-512mb # smallest paid plan; the free plan has no persistent disk
     region: singapore
     buildCommand: npm ci && npm run build
-    # Seeds demo transactions only when the disk's database is still empty.
-    startCommand: node scripts/seed.js --if-empty && npm start
+    # Seeds the demo history when it doesn't run through today yet (first start, or a new day).
+    startCommand: node scripts/seed.js --if-stale && npm start
     healthCheckPath: /api/health
     disk:
       name: data
@@ -20,9 +20,10 @@ services:
         value: "24"
       - key: DB_PATH
         value: /var/data/budget-guardian.db
-      # The seeded demo is built around this date; the dashboard labels it as demo data.
-      - key: DEMO_AS_OF
-        value: "2026-10-13"
+      # Rolling demo: the seeded history is regenerated to end today when a new day starts,
+      # so live PayPal sandbox purchases land in the current month. The dashboard labels it.
+      - key: DEMO_ROLLING
+        value: "1"
       - key: PAYPAL_BASE_URL
         value: https://api-m.sandbox.paypal.com
       - key: PAYPAL_CLIENT_ID

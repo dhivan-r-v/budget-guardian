@@ -30,11 +30,16 @@ const pctOf = (part, whole) => (whole > 0 ? Math.round((part / whole) * 1000) / 
 // Replacing a driving day with public transport saves that day's fuel minus the fare.
 // "A day's fuel" is this month's fuel spending per day so far, since that is how the
 // user is driving right now; it falls back to the usual rate if nothing was spent yet.
+// Early in a month a fill-up covers more days than have passed, so the rate is averaged
+// over at least MIN_RATE_DAYS (otherwise 2 fill-ups on day 2 would read as $49/day).
+const MIN_RATE_DAYS = 7;
 function publicTransportOptions(entry, report, opts) {
   const { daysElapsed, daysInMonth } = report;
   const remainingDays = daysInMonth - daysElapsed;
   const dailyFuelCents =
-    entry.oneOffCents > 0 ? entry.oneOffCents / daysElapsed : entry.usualOneOffCents / daysInMonth;
+    entry.oneOffCents > 0
+      ? entry.oneOffCents / Math.max(daysElapsed, MIN_RATE_DAYS)
+      : entry.usualOneOffCents / daysInMonth;
 
   const options = [];
   for (const days of opts.transitDayOptions) {

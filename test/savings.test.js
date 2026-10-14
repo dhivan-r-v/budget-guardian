@@ -123,3 +123,10 @@ test('suggestSavingsForSpikes attaches savings to every spike', () => {
   const report = suggestSavingsForSpikes(db, detectSpikes(db, { asOf: '2026-10-13' }));
   assert.deepEqual(report.spikes.map((s) => [s.category, s.savings.options.length]), [['fuel', 2]]);
 });
+
+test('fuel: early in the month the daily rate is averaged over at least 7 days', () => {
+  // $104 in 2 fill-ups by day 2: $104 / 7 days, not $52/day.
+  const txns = [...fuelBaseline(), ['2026-10-01', 5200, 'fuel', 'Shell'], ['2026-10-02', 5200, 'fuel', 'Shell']];
+  const s = savingsFor(txns, 'fuel', { asOf: '2026-10-02' });
+  assert.equal(s.assumptions.dailyFuelCents, 1486);
+});

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.js';
 import CategoryCard from './components/CategoryCard.jsx';
-import { Header, Hero, Habits, Approvals, Preferences } from './components/Sections.jsx';
+import { Header, Hero, Habits, Approvals, Preferences, PayPalPanel } from './components/Sections.jsx';
 
 // Flexible categories that aren't spiking still get a card (e.g. entertainment's
 // "skip subscriptions not billed yet").
@@ -9,15 +9,17 @@ async function loadAll() {
   const categories = await api('/api/categories');
   const flexible = categories.filter((c) => c.flexible).map((c) => c.category);
   const query = flexible.map((c) => `category=${encodeURIComponent(c)}`).join('&');
-  const [advice, history, habits, approvals] = await Promise.all([
+  const [advice, history, habits, approvals, paypalStatus, paypalTransactions] = await Promise.all([
     api(`/api/advice${query ? `?${query}` : ''}`),
     api('/api/history'),
     api('/api/habits'),
     api('/api/approvals'),
+    api('/api/paypal/status'),
+    api('/api/paypal/transactions'),
   ]);
   // Non-spiking cards only when they have something to approve.
   const others = advice.others.filter((o) => o.savings.options.some((x) => x.savingsCents > 0));
-  return { categories, advice, history, habits: habits.habits, approvals, others };
+  return { categories, advice, history, habits: habits.habits, approvals, others, paypalStatus, paypalTransactions };
 }
 
 export default function App() {
@@ -50,7 +52,7 @@ export default function App() {
   if (error && !data) return <main className="app"><p className="skeleton">Could not load Budget Guardian: {error}</p></main>;
   if (!data) return <main className="app"><p className="skeleton">Checking this month's spending…</p></main>;
 
-  const { advice, history, habits, approvals, categories, others } = data;
+  const { advice, history, habits, approvals, categories, others, paypalStatus, paypalTransactions } = data;
   const historyFor = (category) => history.categories.find((c) => c.category === category);
   const savingsById = new Map([...advice.spikes, ...others].flatMap((s) => s.savings.options.map((o) => [o.id, o])));
 
@@ -80,6 +82,9 @@ export default function App() {
 
       <h2 className="section">Habits from past months</h2>
       <Habits habits={habits} />
+
+      <h2 className="section">From your PayPal account</h2>
+      <PayPalPanel status={paypalStatus} transactions={paypalTransactions} onChanged={refresh} />
 
       <h2 className="section">Your approvals</h2>
       <Approvals approvals={approvals} />
