@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { usd, usdShort, monthShort, monthLong } from '../api.js';
 
-const HEIGHT = 220;
+const HEIGHT = 200;
 const PAD = { top: 28, right: 96, bottom: 28, left: 44 };
 const BAR = 24; // columns stay thin; the band's leftover is air
 
