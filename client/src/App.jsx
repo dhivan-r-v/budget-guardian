@@ -162,7 +162,7 @@ export default function App() {
         <span>Amounts are calculated in code; AI only writes the words.</span>
         <a href="https://github.com/dhivan-r-v/budget-guardian">Source on GitHub</a>
       </footer>
-      {toast && <div className="toast" role="status"><Icon name="check" size={18} />{toast}</div>}
+      {toast && <div className="toast" role="status"><Icon name="check" size={18} className="draw" />{toast}</div>}
     </>
   );
 }

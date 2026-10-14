@@ -85,11 +85,11 @@ export default function SpendingChart({ category, history }) {
             const restH = Math.max(0, spentTop - restTop - 2);
             return (
               <g key={m.month}>
-                <path d={column(x, spentTop, BAR, y(0) - spentTop, m.current && restH > 0 ? 0 : 4)} fill="var(--series-1)" />
-                {m.current && restH > 0 && <path d={column(x, restTop, BAR, restH)} fill="var(--series-1-soft)" />}
+                <path className="bar" style={{ '--i': i }} d={column(x, spentTop, BAR, y(0) - spentTop, m.current && restH > 0 ? 0 : 4)} fill="var(--series-1)" />
+                {m.current && restH > 0 && <path className="bar rest" style={{ '--i': i }} d={column(x, restTop, BAR, restH)} fill="var(--series-1-soft)" />}
                 <text x={cx} y={HEIGHT - 8} textAnchor="middle">{monthShort(m.month)}</text>
                 {m.current && (
-                  <text className="value-label" x={cx} y={restTop - 8} textAnchor="middle">{usd(projected)}</text>
+                  <text className="value-label fade-late" x={cx} y={restTop - 8} textAnchor="middle">{usd(projected)}</text>
                 )}
                 <rect
                   x={PAD.left + band * i} y={PAD.top} width={band} height={innerH} fill="transparent"
