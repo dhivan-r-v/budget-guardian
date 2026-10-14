@@ -7,6 +7,7 @@ import { adviseCategory, adviseSpikes } from './src/advisor.js';
 import { categorize, accuracy, labelPayPalByRules } from './src/categorizer.js';
 import { habitInsights } from './src/habits.js';
 import { monthlyHistory } from './src/history.js';
+import { budgetStatus, setBudget } from './src/budget.js';
 import { syncPayPal, syncStatus } from './src/paypalSync.js';
 import { seedDemoIfStale } from './src/seed.js';
 import { today } from './src/spikes.js';
@@ -149,6 +150,24 @@ app.get('/api/approvals/:id', approvalRoute(async (req, res) => {
 app.post('/api/approvals/:id/retry', approvalRoute(async (req, res) => {
   res.json(await retry(db, req.params.id));
 }));
+
+// The monthly budget: safe to spend, per day, and whether spikes push the month over.
+app.get('/api/budget', (req, res) => {
+  const report = reportFor(req, res);
+  if (report) res.json(budgetStatus(db, report));
+});
+
+// The user sets their monthly budget: { "monthlyCents": 110000 }
+app.put('/api/budget', (req, res) => {
+  try {
+    setBudget(db, req.body?.monthlyCents);
+  } catch (err) {
+    if (err instanceof RangeError) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+  const report = reportFor(req, res);
+  if (report) res.json(budgetStatus(db, report));
+});
 
 // Monthly totals per category for the dashboard charts.
 app.get('/api/history', (req, res) => {

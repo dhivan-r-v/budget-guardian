@@ -24,41 +24,112 @@ export function Header({ month, daysElapsed, daysInMonth, demo, asOf }) {
   );
 }
 
-// The one headline number, plus three supporting tiles.
-export function Hero({ spikes, history, approvals, month, savingsById }) {
+// Budget meter: spent, recurring still to come, and what's left, with a marker for how far
+// through the month we are (spending past the marker = ahead of pace).
+function BudgetMeter({ budget }) {
+  const total = Math.max(budget.budgetCents, budget.spentCents + budget.upcomingRecurringCents);
+  const pct = (c) => `${Math.max(0, (c / total) * 100)}%`;
+  return (
+    <div className="meter-wrap">
+      <div className="meter" role="img" aria-label={`Spent ${usd(budget.spentCents)}, ${usd(budget.upcomingRecurringCents)} in bills still to come, of a ${usd(budget.budgetCents)} budget`}>
+        <span style={{ width: pct(budget.spentCents), background: 'var(--series-1)' }} />
+        {budget.upcomingRecurringCents > 0 && <span style={{ width: pct(budget.upcomingRecurringCents), background: 'var(--series-1-soft)' }} />}
+        <i className="meter-mark" style={{ left: `${(budget.monthElapsedPct / 100) * (budget.budgetCents / total) * 100}%` }} />
+      </div>
+      <ul className="legend">
+        <li><span className="swatch" style={{ background: 'var(--series-1)' }} />Spent {usd(budget.spentCents)}</li>
+        <li><span className="swatch" style={{ background: 'var(--series-1-soft)' }} />Bills still to come {usd(budget.upcomingRecurringCents)}</li>
+        <li><span className="swatch line" style={{ background: 'var(--ink-2)' }} />Today ({Math.round(budget.monthElapsedPct)}% of the month)</li>
+      </ul>
+    </div>
+  );
+}
+
+function Outlook({ budget, top }) {
+  const over = budget.projectedVsBudgetCents;
+  if (over > 0 && budget.spikesCauseOverspend && top) {
+    return <>Heading <strong>{usd(over)} over</strong> your {usd(budget.budgetCents)} budget, and the <strong>{top.category}</strong> spike (+{usd(top.increaseCents)}) is why. Without it you'd finish under budget.</>;
+  }
+  if (over > 0) return <>Heading <strong>{usd(over)} over</strong> your {usd(budget.budgetCents)} budget by month end.</>;
+  return <>On track to finish <strong>{usd(-over)} under</strong> your {usd(budget.budgetCents)} budget.</>;
+}
+
+// The one headline number (safe to spend), plus supporting tiles.
+export function Hero({ spikes, budget, approvals, month, savingsById }) {
   const top = spikes[0];
-  const spentSoFar = history.categories.reduce((s, c) => s + (c.months.at(-1)?.cents ?? 0), 0);
   const thisMonth = approvals.filter((a) => a.month === month && a.status !== 'failed');
   const saved = thisMonth.reduce((s, a) => s + a.amountCents, 0);
   const co2 = thisMonth.reduce((s, a) => s + (savingsById.get(a.optionId)?.co2AvoidedKg ?? 0), 0);
   return (
     <section className="hero" aria-label="Summary">
       <div className="card">
-        {top ? (
+        {budget.set ? (
+          <>
+            <p className="hero-label">Safe to spend for the next {budget.daysLeft} day{budget.daysLeft === 1 ? '' : 's'}</p>
+            <p className="hero-figure">{usd(Math.max(0, budget.safeToSpendCents))}</p>
+            <p className="hero-label">
+              About <strong>{usd(budget.perDayCents)} a day</strong>, after {usd(budget.upcomingRecurringCents)} in bills and subscriptions still to come.
+            </p>
+            <BudgetMeter budget={budget} />
+            <p className="hero-outlook"><Outlook budget={budget} top={top} /></p>
+          </>
+        ) : top ? (
           <>
             <p className="hero-label">On track to overspend on <strong>{top.category}</strong> this month</p>
             <p className="hero-figure">+{usd(top.increaseCents)}</p>
-            <p className="hero-label">
-              Heading for {usd(top.projectedCents)} against a usual {usd(top.baselineAvgCents)}
-              {top.increasePct !== null ? ` (${Math.round(top.increasePct)}% above usual)` : ''}.
-              {spikes.length > 1 ? ` ${spikes.length - 1} more categor${spikes.length > 2 ? 'ies are' : 'y is'} also above usual.` : ''}
-            </p>
+            <p className="hero-label">Heading for {usd(top.projectedCents)} against a usual {usd(top.baselineAvgCents)}. Set a monthly budget below to see what's safe to spend.</p>
           </>
         ) : (
           <>
             <p className="hero-label">This month</p>
             <p className="hero-figure">On track</p>
-            <p className="hero-label">No category is heading well above its usual month.</p>
+            <p className="hero-label">No category is heading well above its usual month. Set a monthly budget below to see what's safe to spend.</p>
           </>
         )}
       </div>
       <div className="tiles">
-        <div className="tile"><div className="label">Spent so far</div><div className="value">{usd(spentSoFar)}</div><div className="note">all categories</div></div>
+        <div className="tile"><div className="label">Spent so far</div><div className="value">{usd(budget.spentCents)}</div><div className="note">{budget.set ? `${Math.round(budget.spentPct)}% of budget` : 'all categories'}</div></div>
+        <div className="tile"><div className="label">Month-end projection</div><div className="value">{usd(budget.projectedCents)}</div><div className="note">usual month {usd(budget.usualCents)}</div></div>
         <div className="tile"><div className="label">Moved to savings</div><div className="value">{usd(saved)}</div><div className="note">{thisMonth.length} approved plan{thisMonth.length === 1 ? '' : 's'}</div></div>
         <div className="tile"><div className="label">CO2 avoided</div><div className="value">{Math.round(co2 * 10) / 10} kg</div><div className="note">from approved plans</div></div>
-        <div className="tile"><div className="label">Spikes</div><div className="value">{spikes.length}</div><div className="note">categories above usual</div></div>
       </div>
     </section>
+  );
+}
+
+// The user's monthly budget, in dollars.
+export function BudgetSetting({ budget, onChanged }) {
+  const [value, setValue] = useState(budget.set ? String(budget.budgetCents / 100) : '');
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  async function save(e) {
+    e.preventDefault();
+    if (!/^\d+(\.\d{1,2})?$/.test(value.trim()) || Number(value) <= 0) return setError('Enter an amount like 1100 or 1100.50');
+    setBusy(true);
+    setError(null);
+    try {
+      await api('/api/budget', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monthlyCents: Math.round(Number(value) * 100) }),
+      });
+      await onChanged({});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="card budget-form" onSubmit={save}>
+      <label htmlFor="budget">Monthly budget (USD)</label>
+      <p className="muted">What you can spend in a month after rent and savings. Your usual month is {usd(budget.usualCents)}.</p>
+      <div className="actions">
+        <span className="money-input"><span aria-hidden="true">$</span><input id="budget" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} placeholder="1100" /></span>
+        <button type="submit" className="btn" disabled={busy}>{busy ? 'Saving…' : budget.set ? 'Update budget' : 'Set budget'}</button>
+      </div>
+      {error && <p className="error" role="alert">{error}</p>}
+    </form>
   );
 }
 
