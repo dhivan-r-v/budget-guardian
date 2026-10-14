@@ -38,7 +38,7 @@ export default function PlanPicker({ item, approvals, month, onChanged, onApprov
     const done = live.status === 'completed';
     return (
       <div className={`done${done ? '' : ' pending'}`} role="status">
-        <span className={`dot ${live.status}`}><Icon name={done ? 'check' : 'refresh'} size={16} /></span>
+        <span className={`dot ${live.status}`}><Icon name={done ? 'check' : 'refresh'} size={16} className={done ? 'draw' : undefined} /></span>
         <div>
           <strong>{done ? `${usd(live.amountCents)} moved to your savings` : `${STATUS_TEXT[live.status]}: ${usd(live.amountCents)}`}</strong>
           <span className="muted">You chose: {live.description}{live.paypalStatus ? ` · PayPal ${live.paypalStatus}` : ''}</span>

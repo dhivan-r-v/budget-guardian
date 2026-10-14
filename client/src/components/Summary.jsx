@@ -1,5 +1,6 @@
 import { usd, STATUS_TEXT } from '../api.js';
 import { Icon } from './Icons.jsx';
+import { CountUp } from './Motion.jsx';
 
 function Meter({ budget }) {
   const total = Math.max(budget.budgetCents, budget.spentCents + budget.upcomingRecurringCents);
@@ -8,8 +9,10 @@ function Meter({ budget }) {
   return (
     <div className="meter-wrap">
       <div className="meter" role="img" aria-label={`Spent ${usd(budget.spentCents)} and ${usd(budget.upcomingRecurringCents)} in bills still to come, of a ${usd(budget.budgetCents)} budget. ${Math.round(budget.monthElapsedPct)}% of the month has passed.`}>
-        <span style={{ width: pct(budget.spentCents), background: 'var(--series-1)' }} />
-        {budget.upcomingRecurringCents > 0 && <span style={{ width: pct(budget.upcomingRecurringCents), background: 'var(--series-1-soft)' }} />}
+        <div className="meter-fill">
+          <span style={{ width: pct(budget.spentCents), background: 'var(--series-1)' }} />
+          {budget.upcomingRecurringCents > 0 && <span style={{ width: pct(budget.upcomingRecurringCents), background: 'var(--series-1-soft)' }} />}
+        </div>
       </div>
       <i className="today" style={{ left: `${today}%` }} aria-hidden="true" />
     </div>
@@ -54,7 +57,7 @@ export function SummaryCard({ budget, spikes, onSetBudget }) {
   return (
     <section className="card summary" aria-label="Safe to spend">
       <p className="eyebrow">Safe to spend · {budget.daysLeft} day{budget.daysLeft === 1 ? '' : 's'} left</p>
-      <p className="hero-figure">{usd(Math.max(0, budget.safeToSpendCents))}</p>
+      <p className="hero-figure"><CountUp value={Math.max(0, budget.safeToSpendCents)} format={usd} /></p>
       <p className="hero-sub">About <strong>{usd(budget.perDayCents)} a day</strong> of your {usd(budget.budgetCents)} monthly budget</p>
       <Meter budget={budget} />
       <div className="rows">
@@ -81,7 +84,7 @@ export function SavingsCard({ approvals, month, savingsById }) {
   return (
     <section className="card" aria-label="Savings">
       <p className="eyebrow muted">Moved to savings this month</p>
-      <p className="savings-figure">{usd(saved)}</p>
+      <p className="savings-figure"><CountUp value={saved} format={usd} /></p>
       <div className="mini-stats">
         <div className="mini-stat"><div className="label"><Icon name="check" size={12} />Plans approved</div><div className="value">{thisMonth.length}</div></div>
         <div className="mini-stat"><div className="label"><Icon name="leaf" size={12} />CO2 avoided</div><div className="value">{Math.round(co2 * 10) / 10} kg</div></div>

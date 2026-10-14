@@ -121,7 +121,8 @@ h1, h2, h3, p { margin: 0; }
 .hero-sub { color: var(--ink-2); font-size: 0.9rem; }
 .meter-wrap { margin: 18px 0 4px; position: relative; padding-top: 18px; }
 .meter { position: relative; display: flex; gap: 2px; height: 12px; background: var(--surface-3); border-radius: 999px; overflow: hidden; }
-.meter > span { display: block; height: 100%; }
+.meter-fill { display: flex; gap: 2px; height: 100%; width: 100%; }
+.meter-fill > span { display: block; height: 100%; }
 .today { position: absolute; top: 14px; height: 20px; width: 2px; background: var(--ink); border-radius: 1px; transform: translateX(-1px); }
 .today::before { content: 'Today'; position: absolute; top: -2px; left: 50%; transform: translate(-50%, -100%); font-size: 0.7rem; font-weight: 650; color: var(--ink); white-space: nowrap; }
 .rows { display: grid; gap: 8px; margin-top: 14px; }
@@ -256,5 +257,33 @@ table.data td.num, table.data th.num { text-align: right; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .footer { max-width: 1180px; margin: 0 auto; padding: 0 20px 40px; color: var(--muted); font-size: 0.8rem; display: flex; gap: 8px 16px; flex-wrap: wrap; }
 .footer a { color: inherit; }
+/* ---------- Motion (all off under prefers-reduced-motion, see below) ---------- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Cards arrive in sequence on first load */
+.side > section, .main > section, .main > div { animation: fade-up 0.4s ease-out both; }
+.side > section:nth-child(2) { animation-delay: 0.08s; }
+.main > :nth-child(1) { animation-delay: 0.05s; }
+.main > :nth-child(2) { animation-delay: 0.12s; }
+.main > :nth-child(3) { animation-delay: 0.19s; }
+.main > :nth-child(4) { animation-delay: 0.26s; }
+.main > :nth-child(5) { animation-delay: 0.33s; }
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } }
+/* Chart columns rise from the baseline, the projected rest last */
+.chart .bar { transform-box: fill-box; transform-origin: 50% 100%; animation: rise-bar 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--i) * 60ms + 0.15s); }
+.chart .bar.rest { animation-delay: calc(var(--i) * 60ms + 0.55s); }
+.chart .fade-late { animation: fade-in 0.3s ease-out 0.9s both; }
+@keyframes rise-bar { from { transform: scaleY(0); } }
+@keyframes fade-in { from { opacity: 0; } }
+/* The budget meter fills to its value, then Today appears */
+.meter-fill { animation: fill-in 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) 0.2s both; }
+.today { animation: fade-in 0.3s ease-out 0.8s both; }
+@keyframes fill-in { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+/* A check mark draws itself */
+.draw path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: draw 0.45s ease-out 0.1s forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+/* A PayPal purchase that just arrived glows briefly */
+.tx-list li.new { animation: glow 1.8s ease-out; }
+@keyframes glow { 0%, 30% { background: var(--accent-wash); } 100% { background: transparent; } }
+
 .load-error { max-width: 520px; margin: 80px auto; padding: 0 16px; text-align: center; color: var(--ink-2); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

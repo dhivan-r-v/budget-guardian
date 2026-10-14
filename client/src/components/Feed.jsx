@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, usd, capitalize } from '../api.js';
 import { CategoryIcon, Icon } from './Icons.jsx';
+import { useNewIds } from './Motion.jsx';
 
 export function Habits({ habits }) {
   if (!habits.length) return <div className="card"><p className="muted">No small, frequent purchases stood out in your flexible categories.</p></div>;
@@ -39,6 +40,7 @@ const initials = (name) => name.split(/\s+/).map((w) => w[0]).join('').slice(0, 
 
 // Live PayPal data: sync status, recent PayPal purchases, and a manual sync.
 export function PayPalPanel({ status, transactions, onChanged }) {
+  const fresh = useNewIds(transactions);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
   async function syncNow() {
@@ -72,7 +74,7 @@ export function PayPalPanel({ status, transactions, onChanged }) {
       {transactions.length ? (
         <ul className="tx-list">
           {transactions.map((t) => (
-            <li key={t.id}>
+            <li key={t.id} className={fresh.has(t.id) ? 'new' : undefined}>
               <span className="avatar" aria-hidden="true">{initials(t.merchant)}</span>
               <div>
                 <div className="merchant">{t.merchant}</div>
