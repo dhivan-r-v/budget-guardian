@@ -63,6 +63,33 @@ export async function createPayout({ senderBatchId, receiver, amountCents, note,
   return { payoutBatchId: data.batch_header.payout_batch_id, batchStatus: data.batch_header.batch_status };
 }
 
+// Transaction Search: every transaction between two dates. PayPal allows at most 31 days per
+// request, so the range is split into windows, and each window's pages are followed.
+// Returns the raw transaction_details plus how far PayPal's data is refreshed (it lags up to
+// ~3 hours behind real time).
+const WINDOW_MS = 31 * 86_400_000 - 1000;
+export async function searchTransactions(start, end) {
+  const details = [];
+  let lastRefreshed = null;
+  for (let from = start.getTime(); from < end.getTime(); from += WINDOW_MS) {
+    const to = Math.min(from + WINDOW_MS, end.getTime());
+    for (let page = 1, pages = 1; page <= pages; page++) {
+      const q = new URLSearchParams({
+        start_date: new Date(from).toISOString().slice(0, 19) + 'Z',
+        end_date: new Date(to).toISOString().slice(0, 19) + 'Z',
+        fields: 'all',
+        page_size: '500',
+        page: String(page),
+      });
+      const r = await paypal('GET', `/v1/reporting/transactions?${q}`);
+      details.push(...(r.transaction_details ?? []));
+      pages = r.total_pages ?? 1;
+      if (r.last_refreshed_datetime) lastRefreshed = r.last_refreshed_datetime;
+    }
+  }
+  return { details, lastRefreshed };
+}
+
 export async function getPayout(payoutBatchId) {
   const data = await paypal('GET', `/v1/payments/payouts/${encodeURIComponent(payoutBatchId)}`);
   const item = data.items?.[0];

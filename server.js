@@ -4,9 +4,12 @@ import { detectSpikes } from './src/spikes.js';
 import { explainSpikes } from './src/causes.js';
 import { suggestSavings, suggestSavingsForSpikes, setFlexible } from './src/savings.js';
 import { adviseCategory, adviseSpikes } from './src/advisor.js';
-import { categorize, accuracy } from './src/categorizer.js';
+import { categorize, accuracy, labelPayPalByRules } from './src/categorizer.js';
 import { habitInsights } from './src/habits.js';
 import { monthlyHistory } from './src/history.js';
+import { syncPayPal, syncStatus } from './src/paypalSync.js';
+import { seedDemoIfStale } from './src/seed.js';
+import { today } from './src/spikes.js';
 import { getAccessToken, paypal } from './src/paypal.js';
 import { ApprovalError, approve, retry, refresh, getApproval, listApprovals } from './src/approvals.js';
 
@@ -195,9 +198,60 @@ app.put('/api/categories/:category', (req, res) => {
   res.json({ category: req.params.category, flexible: req.body.flexible });
 });
 
+// --- PayPal sync: pull new transactions, label new merchants, keep the demo current.
+// Runs at startup and every SYNC_INTERVAL_MINUTES (default 15); the dashboard can also ask.
+let syncing = null;
+async function runSync() {
+  syncing ??= (async () => {
+    // DEMO_ROLLING: the seeded history is regenerated to end today when a new day starts,
+    // so a long-running demo always has a current month. PayPal rows are never touched.
+    if (process.env.DEMO_ROLLING === '1') seedDemoIfStale(db, { end: today() });
+    const result = await syncPayPal(db);
+    // Label new merchants: the LLM first, then name rules for obvious PayPal merchants.
+    const labels = await categorize(db).catch((err) => ({ errors: [err.message] }));
+    const byRules = labelPayPalByRules(db);
+    return { ...result, labeledByAi: labels.labeledTransactions ?? 0, labeledByRules: byRules };
+  })().finally(() => { syncing = null; });
+  return syncing;
+}
+
+app.get('/api/paypal/status', (req, res) => res.json({ ...syncStatus(db), syncing: Boolean(syncing) }));
+
+// The most recent spending that came from PayPal (not the seeded history).
+app.get('/api/paypal/transactions', (req, res) => {
+  res.json(
+    db.prepare(`
+      SELECT id, occurred_at AS occurredAt, merchant, description, amount_cents AS amountCents,
+             COALESCE(category, seed_category) AS category
+      FROM transactions WHERE source = 'paypal' ORDER BY occurred_at DESC LIMIT 10
+    `).all(),
+  );
+});
+
+// Sync now. Throttled: at most once every 30 seconds.
+app.post('/api/paypal/sync', async (req, res, next) => {
+  const last = syncStatus(db).lastSyncAt;
+  if (!syncing && last && Date.now() - Date.parse(last) < 30_000) {
+    return res.status(429).json({ error: 'synced less than 30 seconds ago', status: syncStatus(db) });
+  }
+  try {
+    const result = await runSync();
+    res.json({ result, status: syncStatus(db) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const SYNC_MINUTES = Number(process.env.SYNC_INTERVAL_MINUTES ?? 15);
+const background = () => runSync().catch((err) => console.error('PayPal sync failed:', err.message));
+if (SYNC_MINUTES > 0) setInterval(background, SYNC_MINUTES * 60_000).unref();
+
 app.use((err, req, res, next) => {
   console.error(err.message, err.details ?? '');
   res.status(err.status ?? 500).json({ error: err.message, details: err.details });
 });
 
-app.listen(PORT, () => console.log(`Budget Guardian server on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Budget Guardian server on http://localhost:${PORT}`);
+  if (SYNC_MINUTES > 0) background();
+});

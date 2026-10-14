@@ -122,7 +122,7 @@ export function detectSpikes(
 
   return {
     asOf,
-    demo: Boolean(process.env.DEMO_AS_OF?.trim()),
+    demo: Boolean(process.env.DEMO_AS_OF?.trim()) || process.env.DEMO_ROLLING === '1',
     month,
     daysElapsed,
     daysInMonth,

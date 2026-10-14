@@ -16,7 +16,9 @@
     "advice": "node --env-file-if-exists=.env scripts/advice.js",
     "categorize": "node --env-file-if-exists=.env scripts/categorize.js",
     "test": "node --test",
-    "reset-demo": "node scripts/reset-demo.js"
+    "reset-demo": "node scripts/reset-demo.js",
+    "demo-purchase": "node --env-file-if-exists=.env scripts/demo-purchase.js",
+    "sync": "node --env-file-if-exists=.env scripts/sync.js"
   },
   "dependencies": {
     "@google/genai": "^2.29.0",

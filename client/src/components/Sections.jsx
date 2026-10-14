@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, usd, monthLong, dateLong, capitalize, STATUS_TEXT } from '../api.js';
+import { api, usd, monthLong, capitalize, STATUS_TEXT } from '../api.js';
 
 export function Header({ month, daysElapsed, daysInMonth, demo, asOf }) {
   return (
@@ -17,7 +17,7 @@ export function Header({ month, daysElapsed, daysInMonth, demo, asOf }) {
         <div className="progress" aria-hidden="true"><span style={{ width: `${(daysElapsed / daysInMonth) * 100}%` }} /></div>
       </div>
       <div className="badges">
-        {demo && <span className="promise" title="Seeded demo transactions and PayPal sandbox money; no real accounts.">Sandbox demo · data as of {dateLong(asOf)}</span>}
+        {demo && <span className="promise" title="Seeded demo history plus your PayPal sandbox transactions; no real money.">Sandbox demo · seeded history + PayPal sandbox</span>}
         <span className="promise">🔒 Nothing moves until you approve</span>
       </div>
     </header>
@@ -103,6 +103,64 @@ export function Approvals({ approvals }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+const ago = (iso) => {
+  if (!iso) return 'never';
+  const min = Math.round((Date.now() - Date.parse(iso)) / 60_000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  const h = Math.round(min / 60);
+  return h < 24 ? `${h} h ago` : `${Math.round(h / 24)} d ago`;
+};
+
+// Live PayPal data: sync status, recent PayPal purchases, and a manual sync.
+export function PayPalPanel({ status, transactions, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);
+  async function syncNow() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const { result } = await api('/api/paypal/sync', { method: 'POST' });
+      setMessage(result.added ? `${result.added} new PayPal purchase${result.added === 1 ? '' : 's'} added.` : 'No new PayPal purchases yet.');
+      await onChanged({});
+    } catch (err) {
+      setMessage(err.status === 429 ? 'Synced a moment ago. Try again in 30 seconds.' : `Sync failed: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="card">
+      <div className="option" style={{ paddingTop: 0 }}>
+        <p className="option-text">
+          Last synced {ago(status.lastSyncAt)}
+          {status.paypalRefreshedTo && <span className="muted"> · PayPal has reported transactions up to {status.paypalRefreshedTo.slice(0, 16).replace('T', ' ')} UTC (it can lag a few hours)</span>}
+        </p>
+        <button type="button" className="btn ghost" disabled={busy || status.syncing} onClick={syncNow}>{busy || status.syncing ? 'Syncing…' : 'Sync now'}</button>
+      </div>
+      {status.lastError && <p className="error">Last sync failed: {status.lastError}</p>}
+      {message && <p className="muted" role="status">{message}</p>}
+      {transactions.length ? (
+        <table className="data">
+          <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th className="num">Amount</th></tr></thead>
+          <tbody>
+            {transactions.map((t) => (
+              <tr key={t.id}>
+                <td>{t.occurredAt.slice(0, 10)}</td>
+                <td>{t.merchant}{t.description ? <div className="muted">{t.description}</div> : null}</td>
+                <td>{t.category ? capitalize(t.category) : <span className="muted">Labeling…</span>}</td>
+                <td className="num">{usd(t.amountCents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="muted">No PayPal purchases yet. Spending from your PayPal account appears here and counts toward spikes, alongside your earlier history.</p>
+      )}
     </div>
   );
 }
