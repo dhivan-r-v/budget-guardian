@@ -65,6 +65,7 @@ PORT=3000
 - Render-ready (`render.yaml`): web service `0.5c-512mb` ($7/month) in Singapore + 1 GB disk ($0.25/month) at `/var/data` for SQLite, health check `/api/health`, seeds demo data on first start (`seed.js --if-empty`), `DEMO_AS_OF=2026-10-13` pins the demo date (dashboard shows a "Sandbox demo" badge), `ADMIN_TOKEN` protects `POST /api/categorize`. `npm run reset-demo [--reseed]` clears approvals. Rehearsed locally with `NODE_ENV=production`.
 - PayPal ingestion done (`src/paypalSync.js`, `GET/POST /api/paypal/*`, `npm run sync`, `npm run demo-purchase`): Transaction Search, last 90 days in 31-day windows, every 15 min + "Sync now". Stores only completed outgoing USD payments (T00xx); skips income, holds/releases (T15xx/T11xx), balance (T1900) and our own savings payouts (T0001 to the savings account / "Budget Guardian" note). Labels: LLM, then name rules for PayPal rows. Rolling demo (`DEMO_ROLLING=1`) replaces the pinned date. Categorizer accuracy measured Oct 14: 100% category, 100% recurring on 180 seeded transactions.
 - Monthly budget done (`src/budget.js`, `GET/PUT /api/budget`, `settings` table): safe to spend = budget - spent - recurring still to come; per day over the days left; month-end projection vs budget; flags when the spikes alone cause the overspend. Demo budget $1,100 (usual month ~$965). Headline on the dashboard is now "safe to spend".
+- UI redesign done: sticky top bar; two columns on desktop (feed + sticky sidebar with safe-to-spend, budget meter with "Today" marker, outlook callout, savings + CO2 + approval timeline), summary first on mobile; plan cards to choose between + one Approve + toast; category icons, status pills, Inter (self-hosted), skeleton loading, settings section. Seed generator made stable across end dates (rolling demo reveals the same month day by day).
 
 ## Roadmap
 **Week 1 (Oct 13-19):** finish sandbox setup and test order; optionally create US sandbox accounts; repo, license, `.gitignore`.
@@ -85,4 +86,4 @@ Technological Implementation, Design, Potential Impact, Innovation, Presentation
 Aim for the "Best Use of Agentic Commerce" and "Best Use of PayPal + AI" honorable mentions.
 
 ## Next task
-UI redesign, then deploy (user creates the Render service from `render.yaml`). Then demo video and Devpost write-up. `npm run reset-demo` before recording; make demo purchases ~3 hours ahead (PayPal reporting lag).
+Deploy (user creates the Render service from `render.yaml`). Then demo video and Devpost write-up. `npm run reset-demo` before recording; make demo purchases ~3 hours ahead (PayPal reporting lag).

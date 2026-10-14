@@ -56,17 +56,23 @@ export function generateDemo({ months = 5, end, seed = 42 }) {
   if (!Number.isInteger(months) || months < 2) throw new Error('months must be an integer >= 2');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(end ?? '')) throw new Error('end must be YYYY-MM-DD');
   const rand = mulberry32(seed);
+  // The spike's fill-ups depend on how far into the month we are, so they draw from their own
+  // stream; everything else draws the same numbers whatever the end date, so a rolling demo
+  // only reveals more of the same month each day instead of reshuffling it.
+  const spikeRand = mulberry32(seed + 1);
   const int = (min, max) => min + Math.floor(rand() * (max - min + 1));
   const pick = (list) => list[int(0, list.length - 1)];
+  const spikeInt = (min, max) => min + Math.floor(spikeRand() * (max - min + 1));
   const [endY, endM, endD] = end.split('-').map(Number);
 
   function generateMonth(y, m, lastDay, isSpikeMonth) {
     const txns = [];
     const monthDays = daysInMonth(y, m);
-    const add = (day, merchant, description, cents, category, recurring = false) => {
+    const add = (day, merchant, description, cents, category, recurring = false, draw = int) => {
+      const time = `${pad(draw(7, 21))}:${pad(draw(0, 59))}`; // drawn even when skipped, to keep the stream stable
       if (day < 1 || day > lastDay) return;
       txns.push({
-        occurred_at: `${y}-${pad(m)}-${pad(day)}T${pad(int(7, 21))}:${pad(int(0, 59))}:00Z`,
+        occurred_at: `${y}-${pad(m)}-${pad(day)}T${time}:00Z`,
         merchant,
         description,
         amount_cents: cents,
@@ -81,7 +87,8 @@ export function generateDemo({ months = 5, end, seed = 42 }) {
     if (isSpikeMonth) {
       const fills = Math.max(2, Math.ceil(lastDay / 2.6));
       for (let i = 0; i < fills; i++) {
-        add(1 + Math.floor((i * lastDay) / fills), pick(FUEL_STATIONS), 'Fuel purchase', int(4200, 5600), 'fuel');
+        const station = FUEL_STATIONS[spikeInt(0, FUEL_STATIONS.length - 1)];
+        add(1 + Math.floor((i * lastDay) / fills), station, 'Fuel purchase', spikeInt(4200, 5600), 'fuel', false, spikeInt);
       }
     } else {
       for (const start of [2, 9, 17, 25]) add(start + int(0, 3), pick(FUEL_STATIONS), 'Fuel purchase', int(3600, 4800), 'fuel');
