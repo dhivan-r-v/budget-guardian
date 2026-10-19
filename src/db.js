@@ -68,20 +68,34 @@ CREATE TABLE IF NOT EXISTS sync_state (
   value TEXT NOT NULL
 );
 
--- Emails sent to the user (spike alerts, plans going over). The key makes each alert go out
--- once: e.g. spike:fuel:2026-10. status: sending, sent, failed (retried up to 3 attempts).
-CREATE TABLE IF NOT EXISTS alerts (
+-- Alerts shown on the user's devices (Web Push): spikes, plans going over. The key makes
+-- each alert exist once, e.g. spike:fuel:2026-10; deliveries track it per device.
+DROP TABLE IF EXISTS alerts;
+CREATE TABLE IF NOT EXISTS notifications (
   key        TEXT PRIMARY KEY,
-  kind       TEXT    NOT NULL,
+  kind       TEXT NOT NULL,
   category   TEXT,
-  month      TEXT    NOT NULL,
-  subject    TEXT    NOT NULL,
-  body       TEXT    NOT NULL,
-  status     TEXT    NOT NULL CHECK (status IN ('sending', 'sent', 'failed')),
-  attempts   INTEGER NOT NULL DEFAULT 0,
-  error      TEXT,
-  created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-  sent_at    TEXT
+  month      TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+-- Devices (browsers) that turned alerts on.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  endpoint   TEXT PRIMARY KEY,
+  p256dh     TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+-- status: sending, sent, failed (retried up to 3 attempts).
+CREATE TABLE IF NOT EXISTS notification_deliveries (
+  key      TEXT    NOT NULL,
+  endpoint TEXT    NOT NULL,
+  status   TEXT    NOT NULL CHECK (status IN ('sending', 'sent', 'failed')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  error    TEXT,
+  sent_at  TEXT,
+  PRIMARY KEY (key, endpoint)
 );
 
 -- Validated LLM responses, keyed by a hash of model + prompt version + input facts,

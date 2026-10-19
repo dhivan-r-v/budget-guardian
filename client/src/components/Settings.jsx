@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, usd } from '../api.js';
-import { CategoryIcon } from './Icons.jsx';
+import { CategoryIcon, Icon } from './Icons.jsx';
+import { pushSupport, currentSubscription, turnOn, turnOff, sendTest, resync } from '../push.js';
 
 // The user's monthly budget, in dollars.
 export function BudgetSetting({ budget, onChanged }) {
@@ -74,40 +75,80 @@ export function Preferences({ categories, onChanged }) {
   );
 }
 
-// Email alerts are set up on the server (RESEND_API_KEY, ALERT_EMAIL_TO); this shows whether
-// they're on and what was sent.
-export function AlertsSetting({ alerts }) {
-  const [note, setNote] = useState(null);
+// Alerts on this device (Web Push): spikes and plans going off track show up as
+// notifications, without opening the dashboard. Each browser turns them on for itself.
+export function AlertsSetting({ alerts, onChanged }) {
+  const support = pushSupport();
+  const [sub, setSub] = useState(undefined); // undefined while checking
   const [busy, setBusy] = useState(false);
-  async function test() {
+  const [note, setNote] = useState(null);
+
+  useEffect(() => {
+    let live = true;
+    currentSubscription()
+      .then(async (s) => {
+        if (s) await resync(s).catch(() => null); // keeps the server in step after a reset
+        if (live) setSub(s ?? null);
+      })
+      .catch(() => live && setSub(null));
+    return () => { live = false; };
+  }, []);
+
+  async function run(fn) {
     setBusy(true);
+    setNote(null);
     try {
-      const r = await api('/api/alerts/test', { method: 'POST' });
-      setNote({ ok: true, text: `Test email sent to ${r.to}.` });
+      await fn();
     } catch (err) {
       setNote({ ok: false, text: err.message });
     } finally {
       setBusy(false);
     }
   }
+  const on = () => run(async () => {
+    const r = await turnOn(alerts.publicKey);
+    setSub(await currentSubscription());
+    setNote({ ok: true, text: r.delivered ? `Alerts are on. ${r.delivered === 1 ? 'This month’s alert was' : `This month’s ${r.delivered} alerts were`} sent to this device.` : 'Alerts are on for this device.' });
+    onChanged({});
+  });
+  const off = () => run(async () => {
+    await turnOff();
+    setSub(null);
+    setNote({ ok: true, text: 'Alerts are off for this device.' });
+    onChanged({});
+  });
+  const test = () => run(async () => {
+    await sendTest(sub.endpoint);
+    setNote({ ok: true, text: 'Test alert sent. It should appear in a few seconds.' });
+  });
+
   return (
     <div className="card">
-      <label style={{ fontWeight: 650 }}>Email alerts</label>
-      {alerts.configured ? (
-        <>
-          <p className="muted" style={{ marginTop: 4 }}>On. Emails go to {alerts.to} when a category starts spiking and when an approved plan goes off track.</p>
-          {alerts.alerts.length > 0 && (
-            <ul className="alert-list">
-              {alerts.alerts.slice(0, 4).map((a) => (
-                <li key={a.key}><span className="grow">{a.subject}</span><span className={`plan-tag ${a.status === 'sent' ? 'good' : a.status === 'failed' ? 'bad' : ''}`}>{a.status === 'sent' ? 'Sent' : a.status === 'failed' ? 'Failed' : 'Sending'}</span></li>
-              ))}
-            </ul>
+      <label style={{ fontWeight: 650 }}>Alerts on this device</label>
+      <p className="muted" style={{ marginTop: 4 }}>A notification when a category starts spiking or an approved plan goes off track. Nothing else, and never ads.</p>
+      {support === 'ios-home-screen' && <p className="muted" style={{ marginTop: 8 }}>On iPhone and iPad: tap Share, then <strong>Add to Home Screen</strong>, and open Budget Guardian from there to turn alerts on.</p>}
+      {support === 'insecure' && <p className="muted" style={{ marginTop: 8 }}>Alerts need a secure (https) address.</p>}
+      {support === 'unsupported' && <p className="muted" style={{ marginTop: 8 }}>This browser can't show notifications. Try Chrome, Edge, Firefox or Safari.</p>}
+      {support === 'ok' && sub !== undefined && (
+        <div className="actions" style={{ marginTop: 12 }}>
+          {sub ? (
+            <>
+              <span className="status-pill ok"><Icon name="check" size={12} />On</span>
+              <button type="button" className="btn ghost" disabled={busy} onClick={test}>Send a test alert</button>
+              <button type="button" className="btn ghost" disabled={busy} onClick={off}>Turn off</button>
+            </>
+          ) : (
+            <button type="button" className="btn" disabled={busy} onClick={on}>{busy ? 'Turning on…' : 'Turn on alerts'}</button>
           )}
-          <button type="button" className="btn ghost" style={{ marginTop: 12 }} disabled={busy} onClick={test}>{busy ? 'Sending…' : 'Send a test email'}</button>
-          {note && <p className={note.ok ? 'muted' : 'error'} role="status" style={{ marginTop: 8 }}>{note.text}</p>}
-        </>
-      ) : (
-        <p className="muted" style={{ marginTop: 4 }}>Off. Set RESEND_API_KEY and ALERT_EMAIL_TO on the server to get an email when a spike starts, without opening the dashboard.</p>
+        </div>
+      )}
+      {note && <p className={note.ok ? 'muted' : 'error'} role="status" style={{ marginTop: 8 }}>{note.text}</p>}
+      {alerts.alerts.length > 0 && (
+        <ul className="alert-list">
+          {alerts.alerts.slice(0, 4).map((a) => (
+            <li key={a.key}><Icon name={a.kind === 'spike' ? 'alert' : 'refresh'} size={12} /><span className="grow">{a.title}</span><span className="muted">{a.sentTo} device{a.sentTo === 1 ? '' : 's'}</span></li>
+          ))}
+        </ul>
       )}
     </div>
   );
