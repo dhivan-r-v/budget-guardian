@@ -153,7 +153,7 @@ export default function App() {
               <div className="settings">
                 <BudgetSetting key={budget.budgetCents ?? 'none'} budget={budget} onChanged={refresh} />
                 <Preferences categories={categories} onChanged={refresh} />
-                <AlertsSetting alerts={alerts} />
+                <AlertsSetting alerts={alerts} onChanged={refresh} />
               </div>
             </Section>
           </div>

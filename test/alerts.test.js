@@ -4,10 +4,9 @@ import { openDb } from '../src/db.js';
 import { setFlexible } from '../src/savings.js';
 import { detectSpikes } from '../src/spikes.js';
 import { approve } from '../src/approvals.js';
-import { runAlerts, listAlerts, emailConfig, maskEmail } from '../src/alerts.js';
+import { runAlerts, listAlerts, subscribe, unsubscribe, deviceCount, vapidKeys, candidateAlerts } from '../src/alerts.js';
 
 const ASOF = '2026-10-13';
-const CONFIG = { configured: true, apiKey: 'test', to: 'me@example.com', from: 'Budget Guardian <a@example.com>', appUrl: 'https://bg.example.com' };
 let seq = 0;
 
 // Fuel spike: usual $160/month, $260 over the first 13 days of October.
@@ -22,77 +21,98 @@ function addFuel(db, at, cents) {
   db.prepare(`INSERT INTO transactions (id, occurred_at, amount_cents, merchant, source, seed_category, seed_recurring) VALUES (?, ?, ?, 'Shell', 'seed', 'fuel', 0)`)
     .run(`t${++seq}`, at, cents);
 }
-const fakeSend = ({ fail } = {}) => {
+const device = (n) => ({ endpoint: `https://fcm.googleapis.com/fcm/send/device-${n}`, keys: { p256dh: `key-${n}`, auth: `auth-${n}` } });
+
+// A fake push service that records what each device was sent; `fail` / `gone` per endpoint.
+function fakePush({ fail = new Set(), gone = new Set(), db } = {}) {
   const sent = [];
-  const send = async (alert) => {
-    if (fail) throw new Error(fail);
-    sent.push(alert);
+  const send = async (sub, payload) => {
+    if (gone.has(sub.endpoint)) {
+      db.prepare('DELETE FROM notification_deliveries WHERE endpoint = ?').run(sub.endpoint);
+      db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(sub.endpoint);
+      throw Object.assign(new Error('gone'), { gone: true });
+    }
+    if (fail.has(sub.endpoint)) throw new Error('push service unavailable');
+    sent.push({ endpoint: sub.endpoint, ...payload });
   };
   return { sent, send };
-};
+}
 const paypal = { async getBalance() { return { availableCents: 500000, refreshedAt: null }; }, async createPayout() { return { payoutBatchId: 'B1', batchStatus: 'PENDING' }; } };
 
-test('a new spike is emailed once, with exact figures from code', async () => {
+test('a spike reaches each device once, with exact figures from code', async () => {
   const db = fuelDb();
+  subscribe(db, device(1));
+  subscribe(db, device(2));
   const report = detectSpikes(db, { asOf: ASOF });
-  const mail = fakeSend();
-  assert.deepEqual(await runAlerts(db, report, { config: CONFIG, send: mail.send }), { configured: true, sent: 1, failed: 0 });
-  const [alert] = mail.sent;
-  assert.equal(alert.key, 'spike:fuel:2026-10');
-  assert.match(alert.subject, /^Fuel spending is \d+% above usual this month$/);
-  assert.match(alert.body, /you've spent \$260\.00 on fuel/);
-  assert.match(alert.body, /Take public transport instead of driving on 3 days: save \$43\.50/);
-  assert.match(alert.body, /Open Budget Guardian: https:\/\/bg\.example\.com/);
-  assert.match(alert.body, /never moves money without your approval/);
+  const push = fakePush();
+  assert.deepEqual(await runAlerts(db, report, { send: push.send }), { devices: 2, sent: 2, failed: 0 });
+  const [first] = push.sent;
+  assert.match(first.title, /^Fuel spending is \d+% above usual$/);
+  assert.match(first.body, /^Heading for \$\d+\.\d\d this month \(usual \$160\.00\)\. Tap to see ways to save\.$/);
+  assert.equal(first.tag, 'spike:fuel:2026-10');
 
-  assert.equal((await runAlerts(db, report, { config: CONFIG, send: mail.send })).sent, 0);
-  assert.equal(mail.sent.length, 1);
-  assert.equal(listAlerts(db)[0].status, 'sent');
+  assert.equal((await runAlerts(db, report, { send: push.send })).sent, 0);
+  // A device that turns alerts on later still gets this month's alert, once.
+  subscribe(db, device(3));
+  assert.equal((await runAlerts(db, report, { send: push.send })).sent, 1);
+  assert.equal(push.sent.at(-1).endpoint, device(3).endpoint);
+  assert.equal(listAlerts(db)[0].sentTo, 3);
 });
 
-test('a failed email is retried on later runs, up to 3 attempts', async () => {
+test('a failed delivery is retried up to 3 times; a device that is gone is removed', async () => {
   const db = fuelDb();
+  subscribe(db, device(1));
+  subscribe(db, device(2));
   const report = detectSpikes(db, { asOf: ASOF });
-  const down = fakeSend({ fail: 'rate limited' });
-  for (let i = 0; i < 4; i++) await runAlerts(db, report, { config: CONFIG, send: down.send });
-  const [row] = listAlerts(db);
-  assert.equal(row.status, 'failed');
-  assert.equal(row.attempts, 3);
-  assert.equal(row.error, 'rate limited');
-  const up = fakeSend();
-  await runAlerts(db, report, { config: CONFIG, send: up.send });
-  assert.equal(up.sent.length, 0);
+  const push = fakePush({ db, fail: new Set([device(1).endpoint]), gone: new Set([device(2).endpoint]) });
+  for (let i = 0; i < 4; i++) await runAlerts(db, report, { send: push.send });
+  const row = db.prepare('SELECT status, attempts, error FROM notification_deliveries WHERE endpoint = ?').get(device(1).endpoint);
+  assert.deepEqual({ ...row }, { status: 'failed', attempts: 3, error: 'push service unavailable' });
+  assert.equal(deviceCount(db), 1);
 });
 
-test('a plan that goes over what it allows is emailed once', async () => {
+test('a plan that goes over what it allows is alerted once; spike alerts mention the plan', async () => {
   const db = fuelDb();
+  subscribe(db, device(1));
   await approve(db, { optionId: 'fuel:public_transport:3', expectedAmountCents: 4350, asOf: ASOF }, { client: paypal, receiver: 'savings@example.com' });
-  const mail = fakeSend();
-  await runAlerts(db, detectSpikes(db, { asOf: ASOF }), { config: CONFIG, send: mail.send });
-  assert.deepEqual(mail.sent.map((a) => a.kind), ['spike']);
-
-  assert.match(mail.sent[0].body, /You already approved a plan for fuel this month: Public transport instead of driving on 3 days\./);
-  assert.doesNotMatch(mail.sent[0].body, /Ways to bring it back down/);
+  const push = fakePush();
+  await runAlerts(db, detectSpikes(db, { asOf: ASOF }), { send: push.send });
+  assert.match(push.sent[0].body, /You already have a plan for it\.$/);
 
   addFuel(db, '2026-10-20T12:00:00Z', 32000); // the plan allows $300 until Oct 31
-  await runAlerts(db, detectSpikes(db, { asOf: '2026-10-21' }), { config: CONFIG, send: mail.send });
-  const over = mail.sent.find((a) => a.kind === 'plan_over');
-  assert.equal(over.subject, 'Your fuel plan is off track');
-  assert.match(over.body, /you've spent \$320\.00 on fuel; the plan allowed \$300\.00 until October 31, so you're \$20\.00 over/);
-  await runAlerts(db, detectSpikes(db, { asOf: '2026-10-22' }), { config: CONFIG, send: mail.send });
-  assert.equal(mail.sent.filter((a) => a.kind === 'plan_over').length, 1);
+  await runAlerts(db, detectSpikes(db, { asOf: '2026-10-21' }), { send: push.send });
+  const over = push.sent.find((a) => a.tag.startsWith('plan_over:'));
+  assert.equal(over.title, 'Your fuel plan is off track');
+  assert.equal(over.body, '$320.00 spent since you approved; the plan allows $300.00 until Oct 31.');
+  await runAlerts(db, detectSpikes(db, { asOf: '2026-10-22' }), { send: push.send });
+  assert.equal(push.sent.filter((a) => a.tag.startsWith('plan_over:')).length, 1);
 });
 
-test('without email settings nothing is sent or recorded', async () => {
+test('with no devices nothing is sent', async () => {
   const db = fuelDb();
-  const mail = fakeSend();
-  const config = emailConfig({});
-  assert.equal(config.configured, false);
-  assert.deepEqual(await runAlerts(db, detectSpikes(db, { asOf: ASOF }), { config, send: mail.send }), { configured: false, sent: 0, failed: 0 });
-  assert.deepEqual(listAlerts(db), []);
+  const push = fakePush();
+  assert.deepEqual(await runAlerts(db, detectSpikes(db, { asOf: ASOF }), { send: push.send }), { devices: 0, sent: 0, failed: 0 });
+  assert.equal(candidateAlerts(db, detectSpikes(db, { asOf: ASOF })).length, 1);
 });
 
-test('the dashboard only sees a masked address', () => {
-  assert.equal(maskEmail('dhivan@example.com'), 'd•••@example.com');
-  assert.equal(emailConfig({ RESEND_API_KEY: 'k', ALERT_EMAIL_TO: 'a@b.c', RENDER_EXTERNAL_URL: 'https://x.onrender.com' }).appUrl, 'https://x.onrender.com');
+test('only browser push services are accepted as endpoints', () => {
+  const db = openDb(':memory:');
+  for (const endpoint of ['https://fcm.googleapis.com/fcm/send/x', 'https://updates.push.services.mozilla.com/wpush/v2/x', 'https://web.push.apple.com/x', 'https://wns2-par02p.notify.windows.com/w/?token=x']) {
+    subscribe(db, { endpoint, keys: { p256dh: 'p', auth: 'a' } });
+  }
+  assert.equal(deviceCount(db), 4);
+  for (const endpoint of ['https://evil.example.com/hook', 'http://fcm.googleapis.com/x', 'https://fcm.googleapis.com.evil.com/x', 'not a url']) {
+    assert.throws(() => subscribe(db, { endpoint, keys: { p256dh: 'p', auth: 'a' } }), RangeError);
+  }
+  assert.throws(() => subscribe(db, { endpoint: 'https://fcm.googleapis.com/x' }), RangeError);
+  unsubscribe(db, 'https://fcm.googleapis.com/fcm/send/x');
+  assert.equal(deviceCount(db), 3);
+});
+
+test('VAPID keys are generated once and kept', () => {
+  const db = openDb(':memory:');
+  const keys = vapidKeys(db, {});
+  assert.equal(keys.publicKey.length, 87);
+  assert.deepEqual(vapidKeys(db, {}), keys);
+  assert.deepEqual(vapidKeys(db, { VAPID_PUBLIC_KEY: 'pub', VAPID_PRIVATE_KEY: 'priv' }), { publicKey: 'pub', privateKey: 'priv' });
 });

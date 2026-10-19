@@ -1,0 +1,10 @@
+{
+  "name": "Budget Guardian",
+  "short_name": "Budget Guardian",
+  "description": "Watches your PayPal spending, explains spikes and moves savings only when you approve.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f6f3",
+  "theme_color": "#2a78d6",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

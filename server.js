@@ -13,7 +13,7 @@ import { seedDemoIfStale } from './src/seed.js';
 import { today } from './src/spikes.js';
 import { getAccessToken, paypal } from './src/paypal.js';
 import { ApprovalError, approve, retry, refresh, getApproval, listApprovals, withFollowThrough } from './src/approvals.js';
-import { emailConfig, maskEmail, runAlerts, listAlerts, sendEmail } from './src/alerts.js';
+import { vapidKeys, subscribe, unsubscribe, isSubscribed, pushSender, runAlerts, listAlerts, deviceCount } from './src/alerts.js';
 
 const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_BASE_URL, PORT = 3000 } = process.env;
 if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
@@ -153,23 +153,44 @@ app.post('/api/approvals/:id/retry', approvalRoute(async (req, res) => {
   res.json(withFollowThrough(db, await retry(db, req.params.id)));
 }));
 
-// --- Email alerts (RESEND_API_KEY + ALERT_EMAIL_TO). Sent after each sync.
+// --- Device alerts (Web Push). New alerts go out after each sync.
 app.get('/api/alerts', (req, res) => {
-  const config = emailConfig();
-  res.json({ configured: config.configured, to: maskEmail(config.to), alerts: listAlerts(db) });
+  res.json({ publicKey: vapidKeys(db).publicKey, devices: deviceCount(db), alerts: listAlerts(db) });
 });
 
-// Sends a test email to the configured address. At most one every 5 minutes, since the
-// deployed demo is public.
-let lastTestEmail = 0;
-app.post('/api/alerts/test', async (req, res, next) => {
-  const config = emailConfig();
-  if (!config.configured) return res.status(503).json({ error: 'email alerts are not set up (RESEND_API_KEY and ALERT_EMAIL_TO)' });
-  if (Date.now() - lastTestEmail < 5 * 60_000) return res.status(429).json({ error: 'a test email was sent less than 5 minutes ago' });
-  lastTestEmail = Date.now();
+// A browser turned alerts on: { subscription } from PushManager.subscribe(). It gets this
+// month's current alerts right away.
+app.post('/api/alerts/subscribe', async (req, res, next) => {
   try {
-    await sendEmail({ subject: 'Budget Guardian alerts are on', text: 'You will get an email when a category starts spiking, and when an approved plan goes off track.' }, config);
-    res.json({ ok: true, to: maskEmail(config.to) });
+    subscribe(db, req.body?.subscription);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  try {
+    const result = await runAlerts(db, detectSpikes(db), { only: req.body.subscription.endpoint });
+    res.json({ ok: true, delivered: result.sent });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/alerts/unsubscribe', (req, res) => {
+  if (typeof req.body?.endpoint !== 'string') return res.status(400).json({ error: 'endpoint is required' });
+  unsubscribe(db, req.body.endpoint);
+  res.json({ ok: true });
+});
+
+// Sends a test alert to the one device asking. At most one a minute per device.
+const lastTest = new Map();
+app.post('/api/alerts/test', async (req, res, next) => {
+  const endpoint = req.body?.endpoint;
+  if (typeof endpoint !== 'string' || !isSubscribed(db, endpoint)) return res.status(404).json({ error: 'alerts are not on for this device' });
+  if (Date.now() - (lastTest.get(endpoint) ?? 0) < 60_000) return res.status(429).json({ error: 'a test alert was sent less than a minute ago' });
+  lastTest.set(endpoint, Date.now());
+  try {
+    const sub = db.prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE endpoint = ?').get(endpoint);
+    await pushSender(db)(sub, { title: 'Budget Guardian alerts are on', body: "You'll get an alert here when a category starts spiking or a plan goes off track.", tag: 'test', url: '/' });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
