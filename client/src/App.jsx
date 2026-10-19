@@ -4,7 +4,7 @@ import { Icon } from './components/Icons.jsx';
 import CategoryCard from './components/CategoryCard.jsx';
 import { SummaryCard, SavingsCard } from './components/Summary.jsx';
 import { Habits, PayPalPanel } from './components/Feed.jsx';
-import { BudgetSetting, Preferences } from './components/Settings.jsx';
+import { BudgetSetting, Preferences, AlertsSetting } from './components/Settings.jsx';
 
 // Flexible categories that aren't spiking still get a card when they have a plan
 // (e.g. entertainment's "skip subscriptions not billed yet").
@@ -12,7 +12,7 @@ async function loadAll() {
   const categories = await api('/api/categories');
   const flexible = categories.filter((c) => c.flexible).map((c) => c.category);
   const query = flexible.map((c) => `category=${encodeURIComponent(c)}`).join('&');
-  const [advice, history, habits, approvals, paypalStatus, paypalTransactions, budget] = await Promise.all([
+  const [advice, history, habits, approvals, paypalStatus, paypalTransactions, budget, alerts] = await Promise.all([
     api(`/api/advice${query ? `?${query}` : ''}`),
     api('/api/history'),
     api('/api/habits'),
@@ -20,9 +20,10 @@ async function loadAll() {
     api('/api/paypal/status'),
     api('/api/paypal/transactions'),
     api('/api/budget'),
+    api('/api/alerts'),
   ]);
   const others = advice.others.filter((o) => o.savings.options.some((x) => x.savingsCents > 0));
-  return { categories, advice, history, habits: habits.habits, approvals, others, paypalStatus, paypalTransactions, budget };
+  return { categories, advice, history, habits: habits.habits, approvals, others, paypalStatus, paypalTransactions, budget, alerts };
 }
 
 function Topbar({ advice }) {
@@ -117,7 +118,7 @@ export default function App() {
   }
   if (!data) return <><Topbar /><Skeleton /></>;
 
-  const { advice, history, habits, approvals, categories, others, paypalStatus, paypalTransactions, budget } = data;
+  const { advice, history, habits, approvals, categories, others, paypalStatus, paypalTransactions, budget, alerts } = data;
   const historyFor = (category) => history.categories.find((c) => c.category === category);
   const savingsById = new Map([...advice.spikes, ...others].flatMap((s) => s.savings.options.map((o) => [o.id, o])));
   const card = (item) => (
@@ -152,6 +153,7 @@ export default function App() {
               <div className="settings">
                 <BudgetSetting key={budget.budgetCents ?? 'none'} budget={budget} onChanged={refresh} />
                 <Preferences categories={categories} onChanged={refresh} />
+                <AlertsSetting alerts={alerts} />
               </div>
             </Section>
           </div>

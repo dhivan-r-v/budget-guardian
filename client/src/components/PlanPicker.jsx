@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, usd, STATUS_TEXT } from '../api.js';
+import { api, usd, dateLong, STATUS_TEXT, PLAN_STATUS } from '../api.js';
 import { Icon } from './Icons.jsx';
 
 export function planName(category, o) {
@@ -22,6 +22,37 @@ function chips(o) {
   return out;
 }
 
+// After approving: is the user keeping the plan? Spending in the category since approval
+// against what the plan allows, or whether a skipped subscription billed anyway.
+function PlanCheck({ category, f }) {
+  const s = PLAN_STATUS[f.status];
+  const until = dateLong(f.endsOn).replace(/, \d{4}$/, '');
+  let detail;
+  if (f.kind === 'skip') {
+    const names = (f.billedMerchants.length ? f.billedMerchants : f.merchants).join(' and ');
+    detail = f.billedMerchants.length ? `${names} billed after you planned to skip it.` : `${names} hasn't billed since you planned to skip it.`;
+  } else if (f.leftCents >= 0) {
+    detail = <><strong>{usd(f.spentCents)}</strong> of the {usd(f.allowanceCents)} this plan leaves for {category} {f.monthEnded ? `through ${until}` : <>· {usd(f.leftCents)} left until {until}</>}</>;
+  } else {
+    detail = <><strong>{usd(f.spentCents)}</strong> spent on {category} since you approved, {usd(-f.leftCents)} more than the {usd(f.allowanceCents)} the plan allows until {until}</>;
+  }
+  const pct = f.kind === 'cap' && f.allowanceCents > 0 ? Math.min(100, (f.spentCents / f.allowanceCents) * 100) : null;
+  return (
+    <div className="plan-check">
+      <div className="plan-check-head">
+        <span>Plan check</span>
+        <span className={`status-pill ${s.tone === 'good' ? 'ok' : 'spike'}`}><Icon name={s.icon} size={12} />{s.text}</span>
+      </div>
+      {pct !== null && (
+        <div className="plan-meter" role="img" aria-label={`${Math.round(pct)}% of the plan's allowance used`}>
+          <span style={{ width: `${pct}%`, background: f.leftCents >= 0 ? 'var(--series-1)' : 'var(--critical)' }} />
+        </div>
+      )}
+      <p>{detail}</p>
+    </div>
+  );
+}
+
 // The category's plans as cards to choose between (they're alternatives), then one approval.
 // Nothing moves until the user confirms; the server recomputes the amount and refuses (409)
 // if it changed, in which case the page refreshes with the new figures.
@@ -37,6 +68,7 @@ export default function PlanPicker({ item, approvals, month, onChanged, onApprov
   if (live) {
     const done = live.status === 'completed';
     return (
+      <>
       <div className={`done${done ? '' : ' pending'}`} role="status">
         <span className={`dot ${live.status}`}><Icon name={done ? 'check' : 'refresh'} size={16} className={done ? 'draw' : undefined} /></span>
         <div>
@@ -45,6 +77,8 @@ export default function PlanPicker({ item, approvals, month, onChanged, onApprov
           {live.error && <p className="error">{live.error}</p>}
         </div>
       </div>
+      {live.followThrough && <PlanCheck category={item.category} f={live.followThrough} />}
+      </>
     );
   }
   if (!item.savings.flexible) {

@@ -287,3 +287,15 @@ table.data td.num, table.data th.num { text-align: right; }
 
 .load-error { max-width: 520px; margin: 80px auto; padding: 0 16px; text-align: center; color: var(--ink-2); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Plan check: follow-through on an approved plan */
+.plan-check { margin-top: 12px; border: 1px solid var(--ring); border-radius: 12px; padding: 12px 14px; font-size: 0.86rem; }
+.plan-check-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 8px; }
+.plan-check p { margin: 0; color: var(--ink-2); }
+.plan-meter { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; margin-bottom: 8px; }
+.plan-meter > span { display: block; height: 100%; border-radius: 999px; }
+.plan-tag { font-weight: 600; }
+.plan-tag.good { color: var(--good); }
+.plan-tag.bad { color: var(--critical); }
+.alert-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; font-size: 0.82rem; }
+.alert-list li { display: flex; gap: 10px; align-items: baseline; }

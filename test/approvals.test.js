@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
 import { setFlexible } from '../src/savings.js';
 import { PayPalError } from '../src/paypal.js';
-import { approve, retry, refresh, listApprovals } from '../src/approvals.js';
+import { approve, retry, refresh, listApprovals, followThrough } from '../src/approvals.js';
 
 const ASOF = '2026-10-13';
 const RECEIVER = 'savings@personal.example.com';
@@ -25,10 +25,14 @@ function fuelDb() {
 }
 
 // A fake PayPal that records payouts; `fail` makes createPayout throw.
-function fakePayPal({ fail, status = 'PENDING', item = 'SUCCESS' } = {}) {
+function fakePayPal({ fail, status = 'PENDING', item = 'SUCCESS', balanceCents = 500000, refreshedAt = null, balanceError } = {}) {
   const payouts = [];
   return {
     payouts,
+    async getBalance() {
+      if (balanceError) throw balanceError;
+      return { availableCents: balanceCents, refreshedAt };
+    },
     async createPayout(p) {
       if (fail) throw fail;
       payouts.push(p);
@@ -156,4 +160,98 @@ test('a completed approval cannot be retried', async () => {
   const db = fuelDb();
   const { approval } = await approve(db, request(), { client: fakePayPal(), receiver: RECEIVER });
   await assert.rejects(retry(db, approval.id, { client: fakePayPal() }), { status: 409 });
+});
+
+// --- Balance check
+
+test('nothing moves when it would leave the PayPal balance below the $50 cushion', async () => {
+  const db = fuelDb();
+  const client = fakePayPal({ balanceCents: 9000 }); // $90 - $43.50 = $46.50 left
+  await assert.rejects(approve(db, request(), { client, receiver: RECEIVER }), (err) => {
+    assert.equal(err.status, 422);
+    assert.match(err.message, /balance is \$90\.00, and moving \$43\.50 would leave less than the \$50\.00/);
+    return true;
+  });
+  assert.equal(client.payouts.length, 0);
+  assert.deepEqual(listApprovals(db), []);
+
+  const enough = await approve(db, request(), { client: fakePayPal({ balanceCents: 9350 }), receiver: RECEIVER });
+  assert.equal(enough.approval.status, 'sent');
+});
+
+test('nothing moves when the balance cannot be read', async () => {
+  const db = fuelDb();
+  const client = fakePayPal({ balanceError: new Error('fetch failed') });
+  await assert.rejects(approve(db, request(), { client, receiver: RECEIVER }), { status: 503 });
+  assert.equal(client.payouts.length, 0);
+  assert.deepEqual(listApprovals(db), []);
+});
+
+test('transfers approved since PayPal last refreshed the balance are subtracted from it', async () => {
+  const db = fuelDb();
+  db.prepare(`INSERT INTO approvals (id, option_id, category, month, description, amount_cents, receiver, status, created_at)
+    VALUES ('earlier', 'food:cut_back:50', 'food', '2026-10', 'Spend less on food', 5000, ?, 'sent', '2026-10-13T10:00:00Z')`).run(RECEIVER);
+  // $140 reported, but $50 already left after the refresh: $90 - $43.50 is under the cushion.
+  const stale = fakePayPal({ balanceCents: 14000, refreshedAt: '2026-10-13T09:00:00Z' });
+  await assert.rejects(approve(db, request(), { client: stale, receiver: RECEIVER }), { status: 422 });
+  const fresh = fakePayPal({ balanceCents: 14000, refreshedAt: '2026-10-13T11:00:00Z' });
+  assert.equal((await approve(db, request(), { client: fresh, receiver: RECEIVER })).approval.status, 'sent');
+});
+
+// --- Follow-through
+
+const addFuel = (db, at, cents) =>
+  db.prepare(`INSERT INTO transactions (id, occurred_at, amount_cents, merchant, source, seed_category, seed_recurring) VALUES (?, ?, ?, 'Shell', 'seed', 'fuel', 0)`)
+    .run(`t${++seq}`, at, cents);
+
+test('a transit plan allows the current fuel rate for the rest of the month, minus the fuel it avoids', async () => {
+  const db = fuelDb();
+  const { approval } = await approve(db, request(), { client: fakePayPal(), receiver: RECEIVER });
+  // $20/day for the 18 days left is $360; 3 transit days avoid $60 of it.
+  assert.equal(approval.planAllowanceCents, 30000);
+  assert.equal(approval.planSince, '2026-10-13T23:59:59Z');
+
+  addFuel(db, '2026-10-13T12:00:00Z', 9000); // before the plan started: not counted
+  addFuel(db, '2026-10-16T12:00:00Z', 12000);
+  assert.deepEqual(followThrough(db, approval, { asOf: '2026-10-20' }), {
+    kind: 'cap', allowanceCents: 30000, spentCents: 12000, leftCents: 18000, endsOn: '2026-10-31', monthEnded: false, status: 'on_track',
+  });
+  addFuel(db, '2026-10-25T12:00:00Z', 19000);
+  assert.equal(followThrough(db, approval, { asOf: '2026-10-20' }).spentCents, 12000); // not yet happened
+  assert.equal(followThrough(db, approval, { asOf: '2026-10-26' }).status, 'over');
+  assert.equal(followThrough(db, approval, { asOf: '2026-11-02' }).status, 'missed');
+  addFuel(db, '2026-11-01T12:00:00Z', 50000); // next month: not part of the plan
+  assert.equal(followThrough(db, approval, { asOf: '2026-11-02' }).spentCents, 31000);
+});
+
+test('a plan kept until the month ends is reported as kept', async () => {
+  const db = fuelDb();
+  const { approval } = await approve(db, request(), { client: fakePayPal(), receiver: RECEIVER });
+  addFuel(db, '2026-10-20T12:00:00Z', 15000);
+  assert.equal(followThrough(db, approval, { asOf: '2026-11-01' }).status, 'kept');
+});
+
+test('a skip-subscriptions plan goes off track when a skipped subscription bills', async () => {
+  const db = openDb(':memory:');
+  const insert = db.prepare(`INSERT INTO transactions (id, occurred_at, amount_cents, merchant, source, seed_category, seed_recurring) VALUES (?, ?, ?, ?, 'seed', 'entertainment', 1)`);
+  for (const m of ['2026-08', '2026-09']) {
+    insert.run(`t${++seq}`, `${m}-05T12:00:00Z`, 1099, 'Spotify');
+    insert.run(`t${++seq}`, `${m}-20T12:00:00Z`, 1549, 'Netflix');
+  }
+  insert.run(`t${++seq}`, '2026-10-05T12:00:00Z', 1099, 'Spotify');
+  setFlexible(db, 'entertainment', true);
+
+  const { approval } = await approve(db, { optionId: 'entertainment:skip_subscriptions', expectedAmountCents: 1549, asOf: ASOF }, { client: fakePayPal(), receiver: RECEIVER });
+  assert.deepEqual(approval.planMerchants, ['Netflix']);
+  assert.equal(followThrough(db, approval, { asOf: '2026-10-19' }).status, 'on_track');
+  insert.run(`t${++seq}`, '2026-10-20T12:00:00Z', 1549, 'Netflix');
+  const f = followThrough(db, approval, { asOf: '2026-10-21' });
+  assert.equal(f.status, 'over');
+  assert.deepEqual(f.billedMerchants, ['Netflix']);
+});
+
+test('failed approvals have no follow-through', async () => {
+  const db = fuelDb();
+  const { approval } = await approve(db, request(), { client: fakePayPal({ fail: new PayPalError(422, { message: 'no' }) }), receiver: RECEIVER });
+  assert.equal(followThrough(db, approval, { asOf: '2026-10-20' }), null);
 });

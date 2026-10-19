@@ -12,7 +12,8 @@ import { syncPayPal, syncStatus } from './src/paypalSync.js';
 import { seedDemoIfStale } from './src/seed.js';
 import { today } from './src/spikes.js';
 import { getAccessToken, paypal } from './src/paypal.js';
-import { ApprovalError, approve, retry, refresh, getApproval, listApprovals } from './src/approvals.js';
+import { ApprovalError, approve, retry, refresh, getApproval, listApprovals, withFollowThrough } from './src/approvals.js';
+import { emailConfig, maskEmail, runAlerts, listAlerts, sendEmail } from './src/alerts.js';
 
 const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_BASE_URL, PORT = 3000 } = process.env;
 if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
@@ -136,20 +137,43 @@ app.post('/api/approvals', approvalRoute(async (req, res) => {
   if (confirm !== true) throw new ApprovalError(400, 'approval must be confirmed by the user (confirm: true)');
   if (asOf !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(asOf))) throw new ApprovalError(400, 'asOf must be YYYY-MM-DD');
   const { approval, duplicate } = await approve(db, { optionId, expectedAmountCents, asOf });
-  res.status(duplicate ? 200 : 201).json({ ...approval, duplicate });
+  res.status(duplicate ? 200 : 201).json({ ...withFollowThrough(db, approval), duplicate });
 }));
 
-app.get('/api/approvals', (req, res) => res.json(listApprovals(db)));
+// Each approval with how the user is doing on its plan (followThrough).
+app.get('/api/approvals', (req, res) => res.json(listApprovals(db).map((a) => withFollowThrough(db, a))));
 
 // Returns the approval, first refreshing a sent payout's status from PayPal.
 app.get('/api/approvals/:id', approvalRoute(async (req, res) => {
   if (!getApproval(db, req.params.id)) throw new ApprovalError(404, 'approval not found');
-  res.json(await refresh(db, req.params.id));
+  res.json(withFollowThrough(db, await refresh(db, req.params.id)));
 }));
 
 app.post('/api/approvals/:id/retry', approvalRoute(async (req, res) => {
-  res.json(await retry(db, req.params.id));
+  res.json(withFollowThrough(db, await retry(db, req.params.id)));
 }));
+
+// --- Email alerts (RESEND_API_KEY + ALERT_EMAIL_TO). Sent after each sync.
+app.get('/api/alerts', (req, res) => {
+  const config = emailConfig();
+  res.json({ configured: config.configured, to: maskEmail(config.to), alerts: listAlerts(db) });
+});
+
+// Sends a test email to the configured address. At most one every 5 minutes, since the
+// deployed demo is public.
+let lastTestEmail = 0;
+app.post('/api/alerts/test', async (req, res, next) => {
+  const config = emailConfig();
+  if (!config.configured) return res.status(503).json({ error: 'email alerts are not set up (RESEND_API_KEY and ALERT_EMAIL_TO)' });
+  if (Date.now() - lastTestEmail < 5 * 60_000) return res.status(429).json({ error: 'a test email was sent less than 5 minutes ago' });
+  lastTestEmail = Date.now();
+  try {
+    await sendEmail({ subject: 'Budget Guardian alerts are on', text: 'You will get an email when a category starts spiking, and when an approved plan goes off track.' }, config);
+    res.json({ ok: true, to: maskEmail(config.to) });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // The monthly budget: safe to spend, per day, and whether spikes push the month over.
 app.get('/api/budget', (req, res) => {
@@ -229,7 +253,9 @@ async function runSync() {
     // Label new merchants: the LLM first, then name rules for obvious PayPal merchants.
     const labels = await categorize(db).catch((err) => ({ errors: [err.message] }));
     const byRules = labelPayPalByRules(db);
-    return { ...result, labeledByAi: labels.labeledTransactions ?? 0, labeledByRules: byRules };
+    // Alerts last, so they see the newly labeled transactions.
+    const alerts = await runAlerts(db, detectSpikes(db)).catch((err) => ({ error: err.message }));
+    return { ...result, labeledByAi: labels.labeledTransactions ?? 0, labeledByRules: byRules, alerts };
   })().finally(() => { syncing = null; });
   return syncing;
 }

@@ -73,3 +73,42 @@ export function Preferences({ categories, onChanged }) {
     </div>
   );
 }
+
+// Email alerts are set up on the server (RESEND_API_KEY, ALERT_EMAIL_TO); this shows whether
+// they're on and what was sent.
+export function AlertsSetting({ alerts }) {
+  const [note, setNote] = useState(null);
+  const [busy, setBusy] = useState(false);
+  async function test() {
+    setBusy(true);
+    try {
+      const r = await api('/api/alerts/test', { method: 'POST' });
+      setNote({ ok: true, text: `Test email sent to ${r.to}.` });
+    } catch (err) {
+      setNote({ ok: false, text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="card">
+      <label style={{ fontWeight: 650 }}>Email alerts</label>
+      {alerts.configured ? (
+        <>
+          <p className="muted" style={{ marginTop: 4 }}>On. Emails go to {alerts.to} when a category starts spiking and when an approved plan goes off track.</p>
+          {alerts.alerts.length > 0 && (
+            <ul className="alert-list">
+              {alerts.alerts.slice(0, 4).map((a) => (
+                <li key={a.key}><span className="grow">{a.subject}</span><span className={`plan-tag ${a.status === 'sent' ? 'good' : a.status === 'failed' ? 'bad' : ''}`}>{a.status === 'sent' ? 'Sent' : a.status === 'failed' ? 'Failed' : 'Sending'}</span></li>
+              ))}
+            </ul>
+          )}
+          <button type="button" className="btn ghost" style={{ marginTop: 12 }} disabled={busy} onClick={test}>{busy ? 'Sending…' : 'Send a test email'}</button>
+          {note && <p className={note.ok ? 'muted' : 'error'} role="status" style={{ marginTop: 8 }}>{note.text}</p>}
+        </>
+      ) : (
+        <p className="muted" style={{ marginTop: 4 }}>Off. Set RESEND_API_KEY and ALERT_EMAIL_TO on the server to get an email when a spike starts, without opening the dashboard.</p>
+      )}
+    </div>
+  );
+}
