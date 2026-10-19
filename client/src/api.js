@@ -25,3 +25,10 @@ export const STATUS_TEXT = {
   completed: 'Moved to savings',
   failed: 'Failed',
 };
+
+export const PLAN_STATUS = {
+  on_track: { text: 'On track', icon: 'check', tone: 'good' },
+  kept: { text: 'Plan kept', icon: 'check', tone: 'good' },
+  over: { text: 'Over plan', icon: 'alert', tone: 'bad' },
+  missed: { text: 'Plan missed', icon: 'alert', tone: 'bad' },
+};

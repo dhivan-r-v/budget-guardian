@@ -26,7 +26,9 @@ To work on the dashboard with live reload, run `npm start` and `npm run dev:clie
 1. **Detect.** Plain code projects each category's month (spent so far + usual spending for the rest of the month) and flags categories heading 30%+ and $25+ above their usual month.
 2. **Explain.** Code splits the increase exactly into more purchases, higher prices and subscription changes. An LLM writes the friendly text around those figures; any number it adds or changes is rejected.
 3. **Suggest.** Only for categories you mark as flexible: public transport days for fuel (money and kg CO2), skipping subscriptions not billed yet, cutting back. Habits show small, frequent purchases and what halving them saves.
-4. **Approve, then act.** Nothing happens until you approve one plan. The server recomputes the amount, records the approval, and only then moves it to your savings account with a PayPal Payout, which can never be paid twice.
+4. **Approve, then act.** Nothing happens until you approve one plan. The server recomputes the amount, checks your PayPal balance (it refuses if the move would leave less than `MIN_BALANCE_AFTER_SAVINGS`, default $50), records the approval, and only then moves it to your savings account with a PayPal Payout, which can never be paid twice.
+5. **Follow through.** Each approval records what the plan leaves for the category until month end (or which subscriptions to skip). The dashboard shows spending since you approved against that: on track, over plan, then kept or missed when the month ends.
+6. **Alert.** After each sync, an email goes out when a category starts spiking and when an approved plan goes over (each once). The text is written by code, so every number is exact. Optional: set `RESEND_API_KEY` and `ALERT_EMAIL_TO` (free [Resend](https://resend.com) account; with the default sender it only delivers to the address you signed up with).
 
 To show a live purchase in the sandbox: `npm run demo-purchase -- --to <merchant sandbox email> --amount 48.20 --what "Fuel purchase"`, then `npm run sync` (PayPal can take up to ~3 hours to report it).
 

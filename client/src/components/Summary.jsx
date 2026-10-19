@@ -1,4 +1,4 @@
-import { usd, STATUS_TEXT } from '../api.js';
+import { usd, STATUS_TEXT, PLAN_STATUS } from '../api.js';
 import { Icon } from './Icons.jsx';
 import { CountUp } from './Motion.jsx';
 
@@ -96,7 +96,7 @@ export function SavingsCard({ approvals, month, savingsById }) {
               <span className={`dot ${a.status}`}><Icon name={a.status === 'completed' ? 'check' : a.status === 'failed' ? 'alert' : 'refresh'} size={12} /></span>
               <div>
                 <div className="what">{a.description}</div>
-                <div className="when">{when(a.createdAt)} · {STATUS_TEXT[a.status]}</div>
+                <div className="when">{when(a.createdAt)} · {STATUS_TEXT[a.status]}{a.followThrough && <> · <span className={`plan-tag ${PLAN_STATUS[a.followThrough.status].tone}`}>{PLAN_STATUS[a.followThrough.status].text}</span></>}</div>
                 {a.error && <div className="error">{a.error}</div>}
               </div>
               <span className="amount">{usd(a.amountCents)}</span>

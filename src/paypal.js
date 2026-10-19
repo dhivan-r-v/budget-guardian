@@ -100,3 +100,15 @@ export async function getPayout(payoutBatchId) {
     transactionId: item?.transaction_id ?? null,
   };
 }
+
+// The account's available USD balance. PayPal refreshes it periodically, so `refreshedAt`
+// says how current it is.
+export async function getBalance() {
+  const data = await paypal('GET', '/v1/reporting/balances?currency_code=USD');
+  const usd = data.balances?.find((b) => b.currency === 'USD');
+  if (!usd) throw new PayPalError(404, { message: 'no USD balance on this PayPal account' });
+  return {
+    availableCents: Math.round(Number(usd.available_balance?.value ?? usd.total_balance.value) * 100),
+    refreshedAt: data.last_refresh_time ?? data.as_of_time ?? null,
+  };
+}

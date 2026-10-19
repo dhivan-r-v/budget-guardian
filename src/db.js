@@ -68,6 +68,22 @@ CREATE TABLE IF NOT EXISTS sync_state (
   value TEXT NOT NULL
 );
 
+-- Emails sent to the user (spike alerts, plans going over). The key makes each alert go out
+-- once: e.g. spike:fuel:2026-10. status: sending, sent, failed (retried up to 3 attempts).
+CREATE TABLE IF NOT EXISTS alerts (
+  key        TEXT PRIMARY KEY,
+  kind       TEXT    NOT NULL,
+  category   TEXT,
+  month      TEXT    NOT NULL,
+  subject    TEXT    NOT NULL,
+  body       TEXT    NOT NULL,
+  status     TEXT    NOT NULL CHECK (status IN ('sending', 'sent', 'failed')),
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  error      TEXT,
+  created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  sent_at    TEXT
+);
+
 -- Validated LLM responses, keyed by a hash of model + prompt version + input facts,
 -- so identical facts never spend API quota twice.
 CREATE TABLE IF NOT EXISTS ai_cache (
@@ -78,10 +94,22 @@ CREATE TABLE IF NOT EXISTS ai_cache (
 );
 `;
 
+// Columns added after the first release, for databases created before them.
+// The plan columns record what the user committed to, so follow-through can be checked:
+// plan_since (ISO time the plan started), plan_allowance_cents (one-off spending the plan
+// allows in its category until month end), plan_merchants (JSON: subscriptions to skip).
+const ADDED_COLUMNS = {
+  approvals: { plan_since: 'TEXT', plan_allowance_cents: 'INTEGER', plan_merchants: 'TEXT' },
+};
+
 export function openDb(file = DB_PATH) {
   mkdirSync(path.dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  for (const [table, cols] of Object.entries(ADDED_COLUMNS)) {
+    const have = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+    for (const [col, type] of Object.entries(cols)) if (!have.has(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+  }
   return db;
 }
