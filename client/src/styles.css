@@ -317,3 +317,14 @@ table.data td.num, table.data th.num { text-align: right; }
 .trace { margin-top: 12px; font-size: 0.86rem; }
 .trace summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .trace ol { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 6px; color: var(--ink-2); }
+
+/* Statement upload */
+.statement label.btn { cursor: pointer; }
+.statement label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.statement-preview { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--ring); }
+.table-wrap { overflow-x: auto; margin-top: 12px; }
+.mini-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+.mini-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--ring); white-space: nowrap; }
+.mini-table td { padding: 6px 8px; border-bottom: 1px solid var(--ring); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.mini-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.mini-table tr.skipped td { color: var(--muted); }

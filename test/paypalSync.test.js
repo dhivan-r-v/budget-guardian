@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
 import { classify, syncPayPal, syncStatus } from '../src/paypalSync.js';
-import { ruleLabel, labelPayPalByRules } from '../src/categorizer.js';
+import { ruleLabel, labelByRules } from '../src/categorizer.js';
 
 const SAVINGS = 'savings@personal.example.com';
 
@@ -84,7 +84,7 @@ test('name rules label obvious PayPal merchants when the LLM is unavailable', as
   const db = openDb(':memory:');
   await syncPayPal(db, { client: { searchTransactions: async () => ({ details: [shell], lastRefreshed: null }) } });
   db.prepare("INSERT INTO transactions (id, occurred_at, amount_cents, merchant, source, seed_category) VALUES ('s1', '2026-10-01T00:00:00Z', 4000, 'Shell', 'seed', 'fuel')").run();
-  assert.equal(labelPayPalByRules(db), 1);
+  assert.equal(labelByRules(db), 1);
   const labels = db.prepare('SELECT source, category FROM transactions ORDER BY source').all();
   assert.deepEqual(labels.map((r) => [r.source, r.category]), [['paypal', 'fuel'], ['seed', null]]); // seed rows left for the LLM
 });

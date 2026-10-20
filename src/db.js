@@ -8,7 +8,9 @@ export const DB_PATH = process.env.DB_PATH ?? path.resolve('data', 'budget-guard
 // `category` / `is_recurring` are filled by the LLM categorizer.
 // `seed_category` / `seed_recurring` are ground truth from the seed script,
 // used only to check the categorizer's accuracy.
-const SCHEMA = `
+// source: seed (demo history), paypal (Transaction Search), statement (an uploaded bank or
+// card statement; import_id says which upload).
+const TRANSACTIONS = `
 CREATE TABLE IF NOT EXISTS transactions (
   id             TEXT PRIMARY KEY,
   occurred_at    TEXT    NOT NULL,
@@ -16,14 +18,30 @@ CREATE TABLE IF NOT EXISTS transactions (
   currency       TEXT    NOT NULL DEFAULT 'USD',
   merchant       TEXT    NOT NULL,
   description    TEXT,
-  source         TEXT    NOT NULL CHECK (source IN ('seed', 'paypal')),
+  source         TEXT    NOT NULL CHECK (source IN ('seed', 'paypal', 'statement')),
   category       TEXT,
   is_recurring   INTEGER,
   seed_category  TEXT,
   seed_recurring INTEGER,
-  created_at     TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+  created_at     TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  import_id      TEXT
+)`;
+const TRANSACTION_COLUMNS = 'id, occurred_at, amount_cents, currency, merchant, description, source, category, is_recurring, seed_category, seed_recurring, created_at';
+
+const SCHEMA = `
+${TRANSACTIONS};
 CREATE INDEX IF NOT EXISTS idx_transactions_occurred_at ON transactions (occurred_at);
+
+-- Uploaded statements, so an upload can be listed and removed again.
+CREATE TABLE IF NOT EXISTS statement_imports (
+  id          TEXT PRIMARY KEY,
+  filename    TEXT    NOT NULL,
+  rows_added  INTEGER NOT NULL,
+  total_cents INTEGER NOT NULL,
+  first_date  TEXT,
+  last_date   TEXT,
+  created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
 
 -- Categories the user has marked as flexible (willing to cut). Savings are only
 -- suggested for these; the AI never decides what is a need or a want.
@@ -121,6 +139,23 @@ export function openDb(file = DB_PATH) {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  // Databases from before statement uploads: SQLite can't change a CHECK constraint, so the
+  // transactions table is rebuilt with the new one (and the import_id column).
+  const tx = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'transactions'").get();
+  if (!tx.sql.includes("'statement'")) {
+    db.exec('BEGIN');
+    try {
+      db.exec('ALTER TABLE transactions RENAME TO transactions_old');
+      db.exec(TRANSACTIONS);
+      db.exec(`INSERT INTO transactions (${TRANSACTION_COLUMNS}) SELECT ${TRANSACTION_COLUMNS} FROM transactions_old`);
+      db.exec('DROP TABLE transactions_old');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_transactions_occurred_at ON transactions (occurred_at)');
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
   for (const [table, cols] of Object.entries(ADDED_COLUMNS)) {
     const have = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
     for (const [col, type] of Object.entries(cols)) if (!have.has(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
