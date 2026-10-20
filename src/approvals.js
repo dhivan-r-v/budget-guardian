@@ -52,7 +52,7 @@ const toApproval = (r) =>
 export const getApproval = (db, id) => toApproval(db.prepare('SELECT * FROM approvals WHERE id = ?').get(id));
 export const listApprovals = (db) => db.prepare('SELECT * FROM approvals ORDER BY created_at DESC, id').all().map(toApproval);
 
-function describe(category, o) {
+export function describe(category, o) {
   if (o.type === 'public_transport') return `Public transport instead of driving on ${o.transitDays} days`;
   if (o.type === 'skip_subscriptions') {
     const names = o.subscriptions.filter((s) => !s.chargedThisMonth).map((s) => s.merchant);

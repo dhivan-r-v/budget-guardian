@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, monthLong } from './api.js';
 import { Icon } from './components/Icons.jsx';
 import CategoryCard from './components/CategoryCard.jsx';
+import RescuePlan from './components/RescuePlan.jsx';
 import { SummaryCard, SavingsCard } from './components/Summary.jsx';
 import { Habits, PayPalPanel } from './components/Feed.jsx';
 import { BudgetSetting, Preferences, AlertsSetting } from './components/Settings.jsx';
@@ -12,7 +13,7 @@ async function loadAll() {
   const categories = await api('/api/categories');
   const flexible = categories.filter((c) => c.flexible).map((c) => c.category);
   const query = flexible.map((c) => `category=${encodeURIComponent(c)}`).join('&');
-  const [advice, history, habits, approvals, paypalStatus, paypalTransactions, budget, alerts] = await Promise.all([
+  const [advice, history, habits, approvals, paypalStatus, paypalTransactions, budget, alerts, rescue] = await Promise.all([
     api(`/api/advice${query ? `?${query}` : ''}`),
     api('/api/history'),
     api('/api/habits'),
@@ -21,9 +22,10 @@ async function loadAll() {
     api('/api/paypal/transactions'),
     api('/api/budget'),
     api('/api/alerts'),
+    api('/api/rescue'),
   ]);
   const others = advice.others.filter((o) => o.savings.options.some((x) => x.savingsCents > 0));
-  return { categories, advice, history, habits: habits.habits, approvals, others, paypalStatus, paypalTransactions, budget, alerts };
+  return { categories, advice, history, habits: habits.habits, approvals, others, paypalStatus, paypalTransactions, budget, alerts, rescue };
 }
 
 function Topbar({ advice }) {
@@ -118,7 +120,7 @@ export default function App() {
   }
   if (!data) return <><Topbar /><Skeleton /></>;
 
-  const { advice, history, habits, approvals, categories, others, paypalStatus, paypalTransactions, budget, alerts } = data;
+  const { advice, history, habits, approvals, categories, others, paypalStatus, paypalTransactions, budget, alerts, rescue } = data;
   const historyFor = (category) => history.categories.find((c) => c.category === category);
   const savingsById = new Map([...advice.spikes, ...others].flatMap((s) => s.savings.options.map((o) => [o.id, o])));
   const card = (item) => (
@@ -137,6 +139,7 @@ export default function App() {
         <main className="main">
           <Section title={advice.spikes.length ? 'Needs your attention' : 'This month'} note={advice.spikes.length ? `${advice.spikes.length} spending spike${advice.spikes.length === 1 ? '' : 's'}` : null}>
             <div className="stack">
+              <RescuePlan rescue={rescue} onChanged={refresh} onApproved={setToast} />
               {advice.spikes.map(card)}
               {!advice.spikes.length && <div className="card"><p className="muted">No category is heading well above its usual month. Nice.</p></div>}
             </div>
