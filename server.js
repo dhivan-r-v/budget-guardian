@@ -13,6 +13,7 @@ import { seedDemoIfStale } from './src/seed.js';
 import { today } from './src/spikes.js';
 import { getAccessToken, paypal } from './src/paypal.js';
 import { ApprovalError, approve, retry, refresh, getApproval, listApprovals, withFollowThrough } from './src/approvals.js';
+import { rescuePlan, approveRescue } from './src/rescue.js';
 import { vapidKeys, subscribe, unsubscribe, isSubscribed, pushSender, runAlerts, listAlerts, deviceCount } from './src/alerts.js';
 
 const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_BASE_URL, PORT = 3000 } = process.env;
@@ -151,6 +152,26 @@ app.get('/api/approvals/:id', approvalRoute(async (req, res) => {
 
 app.post('/api/approvals/:id/retry', approvalRoute(async (req, res) => {
   res.json(withFollowThrough(db, await retry(db, req.params.id)));
+}));
+
+// --- Rescue plan: the planning agent's proposal for getting back under budget.
+// Never waits for the agent: the rules plan is returned until the agent's plan is ready.
+app.get('/api/rescue', async (req, res, next) => {
+  const report = reportFor(req, res);
+  if (!report) return;
+  try {
+    res.json(await rescuePlan(db, report, { wait: false }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Approves every plan in the rescue plan: { items: [{ optionId, expectedAmountCents }], confirm: true }.
+// Each goes through the normal approval (amount rechecked, balance checked).
+app.post('/api/rescue/approve', approvalRoute(async (req, res) => {
+  if (req.body?.confirm !== true) throw new ApprovalError(400, 'approval must be confirmed by the user (confirm: true)');
+  const results = await approveRescue(db, req.body.items);
+  res.json(results.map((r) => (r.approval ? { ...r, approval: withFollowThrough(db, r.approval) } : r)));
 }));
 
 // --- Device alerts (Web Push). New alerts go out after each sync.

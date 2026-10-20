@@ -28,3 +28,25 @@ export async function generateJson({ system, prompt, schema, timeoutMs = DEFAULT
   });
   return JSON.parse(response.text);
 }
+
+// One turn of a tool-using conversation. `contents` is the conversation so far (Gemini
+// format); returns the model's turn to append, the tool calls it asked for, and any text.
+export async function chatTurn({ system, contents, functionDeclarations, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+  client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY.trim() });
+  const response = await client.models.generateContent({
+    model: AI_MODEL,
+    contents,
+    config: {
+      systemInstruction: system,
+      tools: [{ functionDeclarations }],
+      temperature: 0.3,
+      abortSignal: AbortSignal.timeout(timeoutMs),
+    },
+  });
+  const content = response.candidates?.[0]?.content ?? { role: 'model', parts: [] };
+  return {
+    content: { role: 'model', parts: content.parts ?? [] },
+    calls: (response.functionCalls ?? []).map((c) => ({ name: c.name, args: c.args ?? {} })),
+    text: (content.parts ?? []).filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join(''),
+  };
+}
