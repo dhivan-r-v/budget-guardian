@@ -4,7 +4,7 @@ import { detectSpikes } from './src/spikes.js';
 import { explainSpikes } from './src/causes.js';
 import { suggestSavings, suggestSavingsForSpikes, setFlexible } from './src/savings.js';
 import { adviseCategory, adviseSpikes } from './src/advisor.js';
-import { categorize, accuracy, labelPayPalByRules } from './src/categorizer.js';
+import { categorize, accuracy, labelByRules } from './src/categorizer.js';
 import { habitInsights } from './src/habits.js';
 import { monthlyHistory } from './src/history.js';
 import { budgetStatus, setBudget } from './src/budget.js';
@@ -14,6 +14,7 @@ import { today } from './src/spikes.js';
 import { getAccessToken, paypal } from './src/paypal.js';
 import { ApprovalError, approve, retry, refresh, getApproval, listApprovals, withFollowThrough } from './src/approvals.js';
 import { rescuePlan, approveRescue } from './src/rescue.js';
+import { StatementError, previewStatement, importStatement, listImports, removeImport, sampleStatement } from './src/statements.js';
 import { vapidKeys, subscribe, unsubscribe, isSubscribed, pushSender, runAlerts, listAlerts, deviceCount } from './src/alerts.js';
 
 const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_BASE_URL, PORT = 3000 } = process.env;
@@ -24,7 +25,8 @@ if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
 
 const db = openDb();
 const app = express();
-app.use(express.json());
+// Statements are uploaded as text inside JSON, up to 1 MB.
+app.use(express.json({ limit: '2mb' }));
 // The React dashboard's production build (npm run build).
 app.use(express.static('client/dist'));
 
@@ -283,6 +285,52 @@ app.put('/api/categories/:category', (req, res) => {
   res.json({ category: req.params.category, flexible: req.body.flexible });
 });
 
+// --- Statement upload: spending from any bank or card, from its CSV statement.
+const statementRoute = (handler) => async (req, res, next) => {
+  try {
+    await handler(req, res);
+  } catch (err) {
+    if (err instanceof StatementError) return res.status(err.status).json({ error: err.message, details: err.details });
+    next(err);
+  }
+};
+
+// Labels newly imported purchases (the LLM first, then name rules for what it couldn't),
+// then checks for new spikes. In the background: the dashboard polls the import list.
+let labeling = null;
+function labelImported() {
+  labeling ??= categorize(db)
+    .catch((err) => console.error('Labeling imported purchases failed:', err.message))
+    .then(() => labelByRules(db))
+    .then(() => runAlerts(db, detectSpikes(db)))
+    .catch((err) => console.error('Alerts after import failed:', err.message))
+    .finally(() => { labeling = null; });
+  return labeling;
+}
+
+// { text, layout? } -> the layout (read by the AI, or rules) and what would be imported.
+app.post('/api/statements/preview', statementRoute(async (req, res) => {
+  res.json(await previewStatement(db, { text: req.body?.text, layout: req.body?.layout }));
+}));
+
+// { text, layout, filename } -> imports the purchases with the layout the user previewed.
+app.post('/api/statements/import', statementRoute(async (req, res) => {
+  const result = importStatement(db, { text: req.body?.text, layout: req.body?.layout, filename: req.body?.filename });
+  if (result.added) labelImported();
+  res.status(result.added ? 201 : 200).json(result);
+}));
+
+app.get('/api/statements', (req, res) => res.json({ imports: listImports(db), labeling: Boolean(labeling) }));
+
+app.delete('/api/statements/:id', statementRoute(async (req, res) => {
+  res.json(removeImport(db, req.params.id));
+}));
+
+// A sample card statement ending today, to try the upload with.
+app.get('/api/statements/sample.csv', (req, res) => {
+  res.type('text/csv').attachment('sample-card-statement.csv').send(sampleStatement());
+});
+
 // --- PayPal sync: pull new transactions, label new merchants, keep the demo current.
 // Runs at startup and every SYNC_INTERVAL_MINUTES (default 15); the dashboard can also ask.
 let syncing = null;
@@ -294,7 +342,7 @@ async function runSync() {
     const result = await syncPayPal(db);
     // Label new merchants: the LLM first, then name rules for obvious PayPal merchants.
     const labels = await categorize(db).catch((err) => ({ errors: [err.message] }));
-    const byRules = labelPayPalByRules(db);
+    const byRules = labelByRules(db);
     // Alerts last, so they see the newly labeled transactions.
     const alerts = await runAlerts(db, detectSpikes(db)).catch((err) => ({ error: err.message }));
     return { ...result, labeledByAi: labels.labeledTransactions ?? 0, labeledByRules: byRules, alerts };
