@@ -255,3 +255,46 @@ test('failed approvals have no follow-through', async () => {
   const { approval } = await approve(db, request(), { client: fakePayPal({ fail: new PayPalError(422, { message: 'no' }) }), receiver: RECEIVER });
   assert.equal(followThrough(db, approval, { asOf: '2026-10-20' }), null);
 });
+
+// --- The public demo's payout limits
+
+import { createPayoutLimit } from '../src/payoutLimit.js';
+
+test('the daily payout cap stops payouts across all visitors, before anything is recorded', async () => {
+  const shared = openDb(':memory:');
+  const limit = createPayoutLimit(shared, { dailyCents: 8000, now: () => new Date('2026-10-13T12:00:00Z') });
+  const client = fakePayPal();
+  const first = await approve(fuelDb(), request(), { client, receiver: RECEIVER, limit, visitor: 'judge-a' });
+  assert.equal(first.approval.status, 'sent'); // $43.50 of $80
+  const db = fuelDb();
+  await assert.rejects(approve(db, request(), { client, receiver: RECEIVER, limit, visitor: 'judge-b' }), (err) => {
+    assert.equal(err.status, 429);
+    assert.match(err.message, /moved \$43\.50 of its daily \$80\.00 through PayPal today, so this \$43\.50 wasn't moved/);
+    return true;
+  });
+  assert.deepEqual(listApprovals(db), []);
+  assert.equal(client.payouts.length, 1);
+  assert.equal(limit.usedToday(), 4350);
+});
+
+test('each visitor gets a few approvals a day, even across demo resets', async () => {
+  const shared = openDb(':memory:');
+  const limit = createPayoutLimit(shared, { dailyCents: 1_000_000, perVisitorDaily: 2, now: () => new Date('2026-10-13T12:00:00Z') });
+  const client = fakePayPal();
+  for (let i = 0; i < 2; i++) await approve(fuelDb(), request(), { client, receiver: RECEIVER, limit, visitor: '203.0.113.7' });
+  await assert.rejects(approve(fuelDb(), request(), { client, receiver: RECEIVER, limit, visitor: '203.0.113.7' }), { status: 429, message: /approved 2 plans today, this demo's daily limit per visitor/ });
+  assert.equal((await approve(fuelDb(), request(), { client, receiver: RECEIVER, limit, visitor: '198.51.100.2' })).approval.status, 'sent');
+});
+
+test('a payout PayPal refuses gives its amount back; a new day starts fresh', async () => {
+  const shared = openDb(':memory:');
+  let day = '2026-10-13';
+  const limit = createPayoutLimit(shared, { dailyCents: 5000, now: () => new Date(`${day}T12:00:00Z`) });
+  const refused = await approve(fuelDb(), request(), { client: fakePayPal({ fail: new PayPalError(422, { message: 'no' }) }), receiver: RECEIVER, limit, visitor: 'a' });
+  assert.equal(refused.approval.status, 'failed');
+  assert.equal(limit.usedToday(), 0);
+  await approve(fuelDb(), request(), { client: fakePayPal(), receiver: RECEIVER, limit, visitor: 'a' });
+  await assert.rejects(approve(fuelDb(), request(), { client: fakePayPal(), receiver: RECEIVER, limit, visitor: 'b' }), { status: 429 });
+  day = '2026-10-14';
+  assert.equal(limit.usedToday(), 0);
+});

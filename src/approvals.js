@@ -142,7 +142,7 @@ async function send(db, approval, client) {
   return getApproval(db, approval.id);
 }
 
-export async function approve(db, { optionId, expectedAmountCents, asOf } = {}, { client = paypalClient, receiver = process.env.SAVINGS_RECEIVER_EMAIL?.trim(), now = new Date() } = {}) {
+export async function approve(db, { optionId, expectedAmountCents, asOf } = {}, { client = paypalClient, receiver = process.env.SAVINGS_RECEIVER_EMAIL?.trim(), now = new Date(), limit = null, visitor } = {}) {
   if (!receiver) throw new ApprovalError(503, 'SAVINGS_RECEIVER_EMAIL is not set in .env');
   if (!Number.isInteger(expectedAmountCents)) throw new ApprovalError(400, 'expectedAmountCents must be the amount shown to the user, in cents');
 
@@ -170,6 +170,8 @@ export async function approve(db, { optionId, expectedAmountCents, asOf } = {}, 
   await checkBalance(db, amountCents, client);
   const after = livePlan();
   if (after) return after;
+  // The public demo's payout limits (payoutLimit.js); synchronous, like the check above.
+  const reservation = limit?.reserve(amountCents, visitor) ?? null;
   // The plan starts now, or at the end of `asOf` when approving for an earlier date.
   const endOfDay = `${asOf ?? today()}T23:59:59Z`;
   const planSince = isoSeconds(now) < endOfDay ? isoSeconds(now) : endOfDay;
@@ -179,7 +181,10 @@ export async function approve(db, { optionId, expectedAmountCents, asOf } = {}, 
     VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?)
   `).run(id, optionId, category, month, description, amountCents, receiver, planSince, plan.allowanceCents, plan.merchants && JSON.stringify(plan.merchants));
 
-  return { approval: await send(db, getApproval(db, id), client), duplicate: false };
+  const approval = await send(db, getApproval(db, id), client);
+  // A refused payout moved nothing, so it doesn't count toward the limits.
+  if (approval.status === 'failed') limit?.release(reservation);
+  return { approval, duplicate: false };
 }
 
 // Resends an approval whose payout never got through (status "approved").

@@ -19,6 +19,7 @@ import { PlaidError, plaidConfig, connect as connectPlaid, disconnect as disconn
 import { StatementError, previewStatement, importStatement, listImports, removeImport, sampleStatement } from './src/statements.js';
 import { vapidKeys, subscribe, unsubscribe, isSubscribed, pushSender, runAlerts, listAlerts, deviceCount } from './src/alerts.js';
 import { createWorkspaces, copyPayPal } from './src/workspaces.js';
+import { createPayoutLimit } from './src/payoutLimit.js';
 
 const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_BASE_URL, PORT = 3000 } = process.env;
 if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET || !PAYPAL_BASE_URL) {
@@ -33,7 +34,15 @@ const workspaces = process.env.WORKSPACES === '1'
   ? createWorkspaces({ shared, sharedFile: DB_PATH, dir: path.join(path.dirname(DB_PATH), 'workspaces') })
   : null;
 
+// The public demo's daily limits on real sandbox payouts (DEMO_PAYOUT_DAILY_CAP_USD).
+const capUsd = Number(process.env.DEMO_PAYOUT_DAILY_CAP_USD);
+const payoutLimit = capUsd > 0
+  ? createPayoutLimit(shared, { dailyCents: Math.round(capUsd * 100), perVisitorDaily: Number(process.env.DEMO_PAYOUTS_PER_VISITOR) || 8 })
+  : null;
+
 const app = express();
+// On Render, requests arrive through a proxy; req.ip is then the visitor's address.
+app.set('trust proxy', 1);
 // Statements are uploaded as text inside JSON, up to 1 MB.
 app.use(express.json({ limit: '2mb' }));
 // The React dashboard's production build (npm run build).
@@ -197,7 +206,7 @@ app.post('/api/approvals', approvalRoute(async (req, res) => {
   const { optionId, expectedAmountCents, confirm, asOf } = req.body ?? {};
   if (confirm !== true) throw new ApprovalError(400, 'approval must be confirmed by the user (confirm: true)');
   if (asOf !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(asOf))) throw new ApprovalError(400, 'asOf must be YYYY-MM-DD');
-  const { approval, duplicate } = await approve(req.db, { optionId, expectedAmountCents, asOf });
+  const { approval, duplicate } = await approve(req.db, { optionId, expectedAmountCents, asOf }, { limit: payoutLimit, visitor: req.ip });
   res.status(duplicate ? 200 : 201).json({ ...withFollowThrough(req.db, approval), duplicate });
 }));
 
@@ -230,7 +239,7 @@ app.get('/api/rescue', async (req, res, next) => {
 // Each goes through the normal approval (amount rechecked, balance checked).
 app.post('/api/rescue/approve', approvalRoute(async (req, res) => {
   if (req.body?.confirm !== true) throw new ApprovalError(400, 'approval must be confirmed by the user (confirm: true)');
-  const results = await approveRescue(req.db, req.body.items);
+  const results = await approveRescue(req.db, req.body.items, { limit: payoutLimit, visitor: req.ip });
   res.json(results.map((r) => (r.approval ? { ...r, approval: withFollowThrough(req.db, r.approval) } : r)));
 }));
 
