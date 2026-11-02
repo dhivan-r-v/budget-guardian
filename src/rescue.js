@@ -13,7 +13,7 @@
 // agent fails, a rules-based planner (largest savings first, skipping plan types the user
 // keeps missing) proposes the plan instead.
 import { createHash } from 'node:crypto';
-import { AI_MODEL, aiAvailable, chatTurn } from './ai.js';
+import { AGENT_MODEL as AI_MODEL, aiAvailable, chatTurn } from './ai.js';
 import { explainSpike } from './causes.js';
 import { suggestSavings, isFlexible } from './savings.js';
 import { budgetStatus } from './budget.js';
