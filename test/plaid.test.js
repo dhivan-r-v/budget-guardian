@@ -49,6 +49,7 @@ test('only posted USD spending counts', () => {
 test('Plaid categories label rows the name rules would miss', () => {
   assert.equal(ruleLabel('Kwik Trip', 'KWIK TRIP 123 · TRANSPORTATION_GAS'), 'fuel');
   assert.equal(ruleLabel('Sparkfun', 'SPARKFUN · GENERAL_MERCHANDISE_ELECTRONICS'), 'shopping');
+  assert.equal(ruleLabel('Mathnasium', 'Mathnasium · GENERAL_SERVICES_EDUCATION'), 'education');
   assert.equal(ruleLabel('Touchstone', 'TOUCHSTONE CLIMBING · ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS'), 'entertainment');
 });
 

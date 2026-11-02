@@ -189,6 +189,7 @@ const PLAID_RULES = [
   ['bills', /\bRENT_AND_UTILITIES_/],
   ['health', /\bMEDICAL_/],
   ['travel', /\bTRAVEL_/],
+  ['education', /\bGENERAL_SERVICES_EDUCATION\b/],
   ['shopping', /\bGENERAL_MERCHANDISE_/],
 ];
 export function ruleLabel(merchant, description = '') {
