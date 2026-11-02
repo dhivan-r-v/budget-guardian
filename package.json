@@ -18,7 +18,8 @@
     "test": "node --test",
     "reset-demo": "node scripts/reset-demo.js",
     "demo-purchase": "node --env-file-if-exists=.env scripts/demo-purchase.js",
-    "sync": "node --env-file-if-exists=.env scripts/sync.js"
+    "sync": "node --env-file-if-exists=.env scripts/sync.js",
+    "plaid-purchase": "node --env-file-if-exists=.env scripts/plaid-purchase.js"
   },
   "dependencies": {
     "@google/genai": "^2.29.0",

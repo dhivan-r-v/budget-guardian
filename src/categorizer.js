@@ -180,7 +180,21 @@ const RULES = [
   ['bills', /\b(verizon|at&t|t-mobile|comcast|xfinity|electric|utility|utilities|insurance)\b/i],
   ['shopping', /\b(amazon|target|walmart|best ?buy|ebay|etsy|ikea|h&m|zara)\b/i],
 ];
+// Plaid's own categories (kept in the description of Plaid rows), e.g. TRANSPORTATION_GAS.
+const PLAID_RULES = [
+  ['fuel', /\bTRANSPORTATION_GAS\b/],
+  ['transport', /\bTRANSPORTATION_/],
+  ['food', /\bFOOD_AND_DRINK/],
+  ['entertainment', /\bENTERTAINMENT_/],
+  ['bills', /\bRENT_AND_UTILITIES_/],
+  ['health', /\bMEDICAL_/],
+  ['travel', /\bTRAVEL_/],
+  ['education', /\bGENERAL_SERVICES_EDUCATION\b/],
+  ['shopping', /\bGENERAL_MERCHANDISE_/],
+];
 export function ruleLabel(merchant, description = '') {
+  const plaid = PLAID_RULES.find(([, re]) => re.test(description ?? ''))?.[0];
+  if (plaid) return plaid;
   const text = `${merchant} ${description ?? ''}`;
   return RULES.find(([, re]) => re.test(text))?.[0] ?? null;
 }
