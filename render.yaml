@@ -24,6 +24,10 @@ services:
       # so live PayPal sandbox purchases land in the current month. The dashboard labels it.
       - key: DEMO_ROLLING
         value: "1"
+      # Per-visitor demo: each visitor gets their own copy (src/workspaces.js), so one
+      # judge's approvals, uploads or connected banks never change what the next one sees.
+      - key: WORKSPACES
+        value: "1"
       - key: PAYPAL_BASE_URL
         value: https://api-m.sandbox.paypal.com
       - key: PAYPAL_CLIENT_ID

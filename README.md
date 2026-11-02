@@ -35,6 +35,8 @@ To show a live card purchase (Plaid sandbox, account connected with the test use
 
 To show a live PayPal purchase in the sandbox: `npm run demo-purchase -- --to <merchant sandbox email> --amount 48.20 --what "Fuel purchase"`, then `npm run sync` (PayPal can take up to ~3 hours to report it).
 
+On the deployed demo (`WORKSPACES=1`), each visitor gets their own copy of the demo, found through a cookie: approvals, budget, uploads, connected banks and alerts stay private to them, and Settings has a Reset button. The PayPal sync and the AI cache are shared, so the same facts never cost AI quota twice.
+
 `npm test` runs the test suite. `npm run spikes`, `npm run advice` and `npm run categorize` print each step from the command line.
 
 ## License

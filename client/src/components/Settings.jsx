@@ -153,3 +153,39 @@ export function AlertsSetting({ alerts, onChanged }) {
     </div>
   );
 }
+
+// With a per-visitor demo, everything this visitor does stays in their own copy; resetting
+// gives them a fresh one. (Money already moved in the PayPal sandbox stays moved.)
+export function DemoReset() {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  async function reset() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api('/api/workspace/reset', { method: 'POST' });
+      window.location.reload();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="card">
+      <label style={{ fontWeight: 650 }}>Your demo copy</label>
+      <p className="muted" style={{ marginTop: 4 }}>Everything you do here (approvals, your budget, uploads, connected banks, alerts) is visible only to you. Other visitors get their own copy.</p>
+      <div className="actions" style={{ marginTop: 12 }}>
+        {confirming ? (
+          <>
+            <button type="button" className="btn" disabled={busy} onClick={reset}>{busy ? 'Resetting…' : 'Yes, start over'}</button>
+            <button type="button" className="btn ghost" disabled={busy} onClick={() => setConfirming(false)}>Cancel</button>
+          </>
+        ) : (
+          <button type="button" className="btn ghost" onClick={() => setConfirming(true)}><Icon name="refresh" size={14} />Reset the demo</button>
+        )}
+      </div>
+      {error && <p className="error" role="alert">{error}</p>}
+    </div>
+  );
+}
