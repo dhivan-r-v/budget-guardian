@@ -112,6 +112,15 @@ test('a bad first answer is retried, and a good second answer is used', async ()
   assert.equal(advice.source, 'ai');
 });
 
+test('text that uses the facts\' field names instead of words is rejected', async () => {
+  const { db, report, entry } = setup();
+  const { facts } = await adviseCategory(db, report, entry, { useAI: false });
+  const good = goodResponse(facts);
+  const leaked = { ...good, explanation: `Your spentSoFarThisMonth is ${facts.spentSoFarThisMonth}.` };
+  assert.match(validateAdvice(leaked, facts).join(), /fact name "spentSoFarThisMonth"/);
+  assert.deepEqual(validateAdvice(good, facts), []);
+});
+
 test('missing or made-up option ids are rejected', async () => {
   const { db, report, entry } = setup();
   const { facts } = await adviseCategory(db, report, entry, { useAI: false });

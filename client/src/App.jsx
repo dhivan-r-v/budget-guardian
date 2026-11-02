@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, monthLong } from './api.js';
 import { Icon } from './components/Icons.jsx';
+import { Burst, useReveal } from './components/Motion.jsx';
 import CategoryCard from './components/CategoryCard.jsx';
 import RescuePlan from './components/RescuePlan.jsx';
 import StatementUpload from './components/StatementUpload.jsx';
@@ -37,7 +38,7 @@ function Topbar({ advice }) {
       <div className="topbar-inner">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z" /><path d="M9 12l2 2 4-4" />
             </svg>
           </span>
@@ -65,7 +66,7 @@ function Skeleton() {
         <div className="card stack">{block(38, '40%')}{block(16, '80%')}{block(160)}</div>
       </div>
       <div className="side">
-        <div className="card stack">{block(14, '50%')}{block(48, '70%')}{block(12)}{block(90)}</div>
+        <div className="skel vault-skel" />
         <div className="card stack">{block(14, '40%')}{block(32, '50%')}{block(120)}</div>
       </div>
     </div>
@@ -73,7 +74,7 @@ function Skeleton() {
 }
 
 const Section = ({ title, note, children }) => (
-  <section>
+  <section className="reveal">
     <div className="section-head"><h2>{title}</h2>{note && <span className="muted">{note}</span>}</div>
     {children}
   </section>
@@ -107,6 +108,8 @@ export default function App() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+  // Sections rise into view as they scroll in (after each render with new data).
+  useReveal([data]);
   useEffect(() => {
     if (!toast) return undefined;
     const t = setTimeout(() => setToast(null), 4500);
@@ -135,7 +138,7 @@ export default function App() {
       <Topbar advice={advice} />
       <div className="shell">
         <aside className="side" aria-label="Your month">
-          <SummaryCard budget={budget} spikes={advice.spikes} onSetBudget={() => settingsRef.current?.scrollIntoView({ behavior: 'smooth' })} />
+          <SummaryCard budget={budget} spikes={advice.spikes} month={advice.month} onSetBudget={() => settingsRef.current?.scrollIntoView({ behavior: 'smooth' })} />
           <SavingsCard approvals={approvals} month={advice.month} savingsById={savingsById} />
         </aside>
 
@@ -178,7 +181,7 @@ export default function App() {
         <span>Amounts are calculated in code; AI only writes the words.</span>
         <a href="https://github.com/dhivan-r-v/budget-guardian">Source on GitHub</a>
       </footer>
-      {toast && <div className="toast" role="status"><Icon name="check" size={18} className="draw" />{toast}</div>}
+      {toast && <div className="toast" role="status" key={toast}><Burst /><Icon name="check" size={18} className="draw" />{toast}</div>}
     </>
   );
 }

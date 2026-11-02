@@ -9,7 +9,7 @@ import { AI_MODEL, aiAvailable, generateJson } from './ai.js';
 import { explainSpike } from './causes.js';
 import { suggestSavings } from './savings.js';
 
-const PROMPT_VERSION = 2;
+const PROMPT_VERSION = 3;
 const MAX_ATTEMPTS = 2;
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -98,6 +98,18 @@ export function buildFacts(report, entry, cause, savings) {
 
 // --- Validation: the LLM may only repeat numbers it was given.
 
+// Every camelCase key in the facts (the ones that read as code, like "projectedFullMonth").
+function factNames(value, out = new Set()) {
+  if (Array.isArray(value)) value.forEach((v) => factNames(v, out));
+  else if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      if (/[a-z][A-Z]/.test(k)) out.add(k);
+      factNames(v, out);
+    }
+  }
+  return out;
+}
+
 const numbersIn = (text) => (text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((n) => n.replace(/,/g, ''));
 
 export function validateAdvice(out, facts) {
@@ -115,6 +127,10 @@ export function validateAdvice(out, facts) {
     for (const n of numbersIn(text)) if (!allowed.has(n)) errors.push(`number "${n}" is not in the facts`);
   }
   if (out.options.some((o) => typeof o.text !== 'string' || !o.text.trim())) errors.push('empty option text');
+  // The facts' own names ("spentSoFarThisMonth") must never leak into the sentences.
+  for (const key of factNames(facts)) {
+    if (texts.some((t) => t.includes(key))) errors.push(`text uses the fact name "${key}" instead of plain words`);
+  }
   return errors;
 }
 
@@ -168,6 +184,7 @@ const SYSTEM = `You are Budget Guardian, a friendly money assistant for students
 You receive FACTS about one spending category this month and write short, warm, plain-English text.
 
 Rules:
+- Write natural English for a person. Never write the FACTS field names (like "spentSoFarThisMonth"); say "you've spent" instead.
 - Use only the figures in FACTS, copied exactly as written (e.g. "$179.10", "145.1 kg CO2"). Never calculate, round, add, convert or invent any number.
 - Each figure means exactly what its name says. spentSoFarThisMonth is spending to date. projectedFullMonthVsUsual compares the projected full-month total with a usual full month; never present it as the difference between spending so far and usual.
 - For public transport options, mention both the money saved and the CO2 avoided.
