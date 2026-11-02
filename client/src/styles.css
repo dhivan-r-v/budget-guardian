@@ -452,3 +452,21 @@ table.data td.num, table.data th.num { text-align: right; }
   .reveal { opacity: 1; transform: none; }
   .vault-card { transform: none; }
 }
+
+/* Try it: a short tour for first-time visitors */
+.try-it { background: linear-gradient(135deg, var(--accent-wash), transparent 60%), var(--surface); }
+.try-steps { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.try-steps button {
+  width: 100%; height: 100%; text-align: left; display: flex; gap: 12px; align-items: flex-start; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--ring); border-radius: var(--radius-sm); padding: 12px 14px; color: var(--ink);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.try-steps button:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: color-mix(in srgb, var(--accent) 40%, var(--ring)); }
+.try-steps button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.try-steps strong { display: block; font-size: 0.9rem; }
+.try-steps .muted { display: block; font-size: 0.8rem; margin-top: 2px; line-height: 1.4; overflow-wrap: anywhere; }
+.try-n { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-family: var(--serif); font-size: 1.05rem; background: var(--btn); color: var(--btn-ink); }
+.paypal-uses { color: var(--ink-2); font-size: 0.88rem; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--ring); }
+.paypal-uses strong { color: var(--ink); font-weight: 600; }
+.topbar .live-dot { margin-right: 2px; }
+section[id] { scroll-margin-top: 84px; }

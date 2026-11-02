@@ -6,6 +6,7 @@ import CategoryCard from './components/CategoryCard.jsx';
 import RescuePlan from './components/RescuePlan.jsx';
 import StatementUpload from './components/StatementUpload.jsx';
 import PlaidConnect from './components/PlaidConnect.jsx';
+import TryIt from './components/TryIt.jsx';
 import { SummaryCard, SavingsCard } from './components/Summary.jsx';
 import { Habits, PayPalPanel } from './components/Feed.jsx';
 import { BudgetSetting, Preferences, AlertsSetting, DemoReset } from './components/Settings.jsx';
@@ -32,7 +33,7 @@ async function loadAll() {
   return { categories, advice, history, habits: habits.habits, approvals, others, paypalStatus, paypalTransactions, budget, alerts, rescue, workspace };
 }
 
-function Topbar({ advice }) {
+function Topbar({ advice, paypal }) {
   return (
     <header className="topbar">
       <div className="topbar-inner">
@@ -49,6 +50,11 @@ function Topbar({ advice }) {
             {monthLong(advice.month)} · day {advice.daysElapsed} of {advice.daysInMonth}
             <span className="month-track" aria-hidden="true"><span style={{ width: `${(advice.daysElapsed / advice.daysInMonth) * 100}%` }} /></span>
           </div>
+        )}
+        {paypal && (
+          <span className="pill" title={paypal.lastError ? `Last PayPal sync failed: ${paypal.lastError}` : 'Spending is read from your PayPal sandbox account; savings move with PayPal Payouts.'}>
+            <span className={`live-dot${paypal.lastError ? ' bad' : ''}`} />PayPal {paypal.lastError ? 'sync failed' : 'connected'}
+          </span>
         )}
         {advice?.demo && <span className="pill demo" title="Seeded demo history plus your PayPal sandbox transactions; no real money.">Sandbox demo</span>}
         <span className="pill"><Icon name="lock" size={13} />Nothing moves until you approve</span>
@@ -73,8 +79,8 @@ function Skeleton() {
   );
 }
 
-const Section = ({ title, note, children }) => (
-  <section className="reveal">
+const Section = ({ id, title, note, children }) => (
+  <section className="reveal" id={id}>
     <div className="section-head"><h2>{title}</h2>{note && <span className="muted">{note}</span>}</div>
     {children}
   </section>
@@ -135,7 +141,7 @@ export default function App() {
 
   return (
     <>
-      <Topbar advice={advice} />
+      <Topbar advice={advice} paypal={paypalStatus} />
       <div className="shell">
         <aside className="side" aria-label="Your month">
           <SummaryCard budget={budget} spikes={advice.spikes} month={advice.month} onSetBudget={() => settingsRef.current?.scrollIntoView({ behavior: 'smooth' })} />
@@ -143,7 +149,9 @@ export default function App() {
         </aside>
 
         <main className="main">
-          <Section title={advice.spikes.length ? 'Needs your attention' : 'This month'} note={advice.spikes.length ? `${advice.spikes.length} spending spike${advice.spikes.length === 1 ? '' : 's'}` : null}>
+          <TryIt />
+
+          <Section id="attention" title={advice.spikes.length ? 'Needs your attention' : 'This month'} note={advice.spikes.length ? `${advice.spikes.length} spending spike${advice.spikes.length === 1 ? '' : 's'}` : null}>
             <div className="stack">
               <RescuePlan rescue={rescue} onChanged={refresh} onApproved={setToast} />
               {advice.spikes.map(card)}
@@ -151,13 +159,13 @@ export default function App() {
             </div>
           </Section>
 
+          <Section id="paypal" title="Your PayPal account" note="read, checked, moved with PayPal"><PayPalPanel status={paypalStatus} transactions={paypalTransactions} onChanged={refresh} /></Section>
+
           {others.length > 0 && <Section title="More ways to save"><div className="stack">{others.map(card)}</div></Section>}
 
           <Section title="Habits from past months" note="small, frequent purchases"><Habits habits={habits} /></Section>
 
-          <Section title="From your PayPal account"><PayPalPanel status={paypalStatus} transactions={paypalTransactions} onChanged={refresh} /></Section>
-
-          <Section title="Cards and other banks">
+          <Section id="banks" title="Cards and other banks">
             <div className="stack">
               <div className="card"><PlaidConnect onChanged={refresh} onConnected={setToast} /></div>
               <StatementUpload onChanged={refresh} onImported={setToast} />
@@ -165,7 +173,7 @@ export default function App() {
           </Section>
 
           <div ref={settingsRef}>
-            <Section title="Settings">
+            <Section id="settings" title="Settings">
               <div className="settings">
                 <BudgetSetting key={budget.budgetCents ?? 'none'} budget={budget} onChanged={refresh} />
                 <Preferences categories={categories} onChanged={refresh} />

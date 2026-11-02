@@ -58,6 +58,10 @@ export function PayPalPanel({ status, transactions, onChanged }) {
   }
   return (
     <div className="card">
+      <p className="paypal-uses">
+        Budget Guardian reads your spending with PayPal <strong>Transaction Search</strong>, checks your <strong>balance</strong> before moving anything,
+        and moves the savings you approve with PayPal <strong>Payouts</strong>.
+      </p>
       <div className="sync-row">
         <div className="grow">
           <div><span className={`live-dot${status.lastError ? ' bad' : ''}`} />{status.lastError ? 'Last sync failed' : `Synced ${ago(status.lastSyncAt)}`}</div>
