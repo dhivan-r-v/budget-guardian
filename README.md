@@ -16,7 +16,7 @@ npm run build          # builds the React dashboard
 npm start              # http://localhost:3000
 ```
 
-Use US sandbox accounts (Business for the app, Personal for the buyer and for `SAVINGS_RECEIVER_EMAIL`) so payments work in USD. `GEMINI_API_KEY` is optional: without it, explanations are written by code instead of AI.
+Use US sandbox accounts (Business for the app, Personal for the buyer and for `SAVINGS_RECEIVER_EMAIL`) so payments work in USD. AI is optional: without a key, explanations are written by code instead. With `AI_API_KEY` (an OpenAI-compatible API, Groq by default), open models answer first: Qwen 3.8 for advice, labels and statement layouts, gpt-oss-120b for the rescue agent (both open-weight; any OpenAI-compatible model can be set). `GEMINI_API_KEY` adds Gemini as the fallback, or works alone. See `.env.example` for OpenRouter and NVIDIA NIM.
 
 To work on the dashboard with live reload, run `npm start` and `npm run dev:client` together, then open http://localhost:5173.
 

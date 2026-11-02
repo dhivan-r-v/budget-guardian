@@ -49,7 +49,7 @@ export default function RescuePlan({ rescue, onChanged, onApproved }) {
     <section className="card rescue" aria-label="Rescue plan">
       <div className="rescue-head">
         <p className="eyebrow"><Icon name="sparkle" size={14} />Rescue plan</p>
-        <span className={`status-pill ${source === 'ai' ? 'ok' : 'neutral'}`} title={source === 'ai' ? 'Planned by the AI agent; every figure was calculated by code.' : 'Planned by rules while the AI agent is unavailable.'}>
+        <span className={`status-pill ${source === 'ai' ? 'ok' : 'neutral'}`} title={source === 'ai' ? `Planned by the AI agent (${rescue.model}); every figure was calculated by code.` : 'Planned by rules while the AI agent is unavailable.'}>
           {source === 'ai' ? 'Planned by AI agent' : rescue.pending ? 'AI agent is planning…' : 'Planned by rules'}
         </span>
       </div>

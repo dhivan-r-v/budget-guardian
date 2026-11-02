@@ -13,7 +13,7 @@
 // agent fails, a rules-based planner (largest savings first, skipping plan types the user
 // keeps missing) proposes the plan instead.
 import { createHash } from 'node:crypto';
-import { AI_MODEL, aiAvailable, chatTurn } from './ai.js';
+import { AGENT_MODEL as AI_MODEL, aiAvailable, agentProviders } from './ai.js';
 import { explainSpike } from './causes.js';
 import { suggestSavings, isFlexible } from './savings.js';
 import { budgetStatus } from './budget.js';
@@ -21,7 +21,7 @@ import { usd } from './advisor.js';
 import { approve, listApprovals, followThrough, describe, ApprovalError } from './approvals.js';
 
 const PROMPT_VERSION = 1;
-const MAX_TURNS = 8;
+const MAX_TURNS = 8; // after the briefing, usually 2-3 are needed
 const MISSED_LIMIT = 2; // plan types missed this many times are avoided
 
 const CAUSE_TEXT = {
@@ -228,13 +228,30 @@ How to work:
 - Finish by calling proposePlan once: a 1-2 sentence summary, and one short sentence per option saying why you chose it.`;
 
 // The tool-using loop. `turn` is injectable for tests. Returns { plan, trace } or throws.
+// The briefing: the facts every plan needs (budget, spikes, plan history, the options in each
+// flexible category), gathered by code with the same tools and given to the agent up front.
+// Its turns then go to the planning itself (simulate, a closer look at purchases, propose),
+// which takes far fewer turns and tokens; free tiers allow only a few thousand a minute.
+function briefing(sit) {
+  const calls = [['getBudgetStatus', {}], ['getSpikes', {}], ['getPlanHistory', {}]];
+  for (const c of sit.categories) if (c.flexible && !c.planned) calls.push(['getPlanOptions', { category: c.entry.category }]);
+  return calls.map(([name, args]) => ({ name, args, ...runTool(sit, name, args) }));
+}
+
 async function runAgent(sit, { turn }) {
-  const goal = `Goal: the month is heading ${usd(sit.overCents)} over the ${usd(sit.budget.budgetCents)} budget. Approved plans already cover ${usd(sit.committedCents)}, so ${usd(sit.gapCents)} is still to cover. Make a plan.`;
+  const facts = briefing(sit);
+  const goal = [
+    `Goal: the month is heading ${usd(sit.overCents)} over the ${usd(sit.budget.budgetCents)} budget. Approved plans already cover ${usd(sit.committedCents)}, so ${usd(sit.gapCents)} is still to cover. Make a plan.`,
+    'Facts already gathered for you (the same results the tools return):',
+    ...facts.map((f) => `${f.name}(${Object.keys(f.args).length ? JSON.stringify(f.args) : ''}) -> ${JSON.stringify(f.out)}`),
+    'Now compare combinations with simulate, look at purchases if it helps, and finish with proposePlan.',
+  ].join('\n');
   const seenNumbers = new Set(numbersIn(goal));
   const contents = [{ role: 'user', parts: [{ text: goal }] }];
-  const trace = [];
+  const trace = facts.map((f) => ({ tool: f.name, text: f.step }));
   for (let i = 0; i < MAX_TURNS; i++) {
-    const { content, calls } = await turn({ system: SYSTEM, contents, functionDeclarations: TOOLS });
+    const { content, calls, text } = await turn({ system: SYSTEM, contents, functionDeclarations: TOOLS });
+    if (process.env.DEBUG_AGENT) console.error(`[agent turn ${i + 1}]`, calls.map((c) => `${c.name}(${JSON.stringify(c.args)})`).join(' ') || `text: ${String(text).slice(0, 200)}`);
     contents.push(content);
     if (!calls.length) {
       contents.push({ role: 'user', parts: [{ text: 'Use the tools, then finish by calling proposePlan.' }] });
@@ -319,10 +336,26 @@ function fromCache(sit, cached) {
   return { plan: { items, totalCents, afterCents: sit.gapCents - totalCents, summary: cached.summary }, trace: cached.trace };
 }
 
+// Runs the agent with each provider in turn (an open model, then Gemini). A provider that
+// fails starts over from the beginning with the next: conversations can't move between models.
 async function generate(sit, key, turn) {
-  const result = await runAgent(sit, { turn });
-  const stored = { items: result.plan.items.map((i) => ({ optionId: i.id, why: i.why })), summary: result.plan.summary, trace: result.trace };
-  sit.db.prepare('INSERT OR REPLACE INTO ai_cache (key, model, response) VALUES (?, ?, ?)').run(key, AI_MODEL, JSON.stringify(stored));
+  const providers = typeof turn === 'function' ? [turn] : turn;
+  if (!providers.length) throw new Error('no AI provider configured');
+  let result;
+  let lastError;
+  for (const t of providers) {
+    try {
+      // Which model answered: shown on the plan and kept with it in the cache.
+      result = { ...(await runAgent(sit, { turn: t })), model: t.model ?? AI_MODEL };
+      break;
+    } catch (err) {
+      lastError = err;
+      if (providers.length > 1) console.warn(`Rescue agent failed (${err.message}); trying the next provider.`);
+    }
+  }
+  if (!result) throw lastError;
+  const stored = { items: result.plan.items.map((i) => ({ optionId: i.id, why: i.why })), summary: result.plan.summary, trace: result.trace, model: result.model };
+  sit.db.prepare('INSERT OR REPLACE INTO ai_cache (key, model, response) VALUES (?, ?, ?)').run(key, result.model, JSON.stringify(stored));
   return result;
 }
 
@@ -333,7 +366,7 @@ const publicPlan = (plan) => ({
 
 // The rescue plan for this month. With wait: false (the dashboard) an uncached agent plan is
 // generated in the background and the rules plan is returned meanwhile (pending: true).
-export async function rescuePlan(db, report, { turn = chatTurn, useAI = aiAvailable(), wait = true } = {}) {
+export async function rescuePlan(db, report, { turn = agentProviders(), useAI = aiAvailable(), wait = true } = {}) {
   const sit = situation(db, report);
   const goal = { budgetCents: sit.budget.budgetCents, overCents: sit.overCents, committedCents: sit.committedCents, gapCents: sit.gapCents };
   if (!sit.budget.set) return { status: 'no_budget', goal };
@@ -345,7 +378,10 @@ export async function rescuePlan(db, report, { turn = chatTurn, useAI = aiAvaila
 
   const key = cacheKey(sit);
   const cached = db.prepare('SELECT response FROM ai_cache WHERE key = ?').get(key);
-  if (cached) return respond(fromCache(sit, JSON.parse(cached.response)), { source: 'ai', model: AI_MODEL });
+  if (cached) {
+    const c = JSON.parse(cached.response);
+    return respond(fromCache(sit, c), { source: 'ai', model: c.model ?? AI_MODEL });
+  }
 
   if (!wait) {
     const failed = lastFailure.get(key);
@@ -359,7 +395,8 @@ export async function rescuePlan(db, report, { turn = chatTurn, useAI = aiAvaila
     return fallback({ pending: inFlight.has(key), ...(failed && { aiError: failed.message }) });
   }
   try {
-    return respond(await generate(sit, key, turn), { source: 'ai', model: AI_MODEL });
+    const result = await generate(sit, key, turn);
+    return respond(result, { source: 'ai', model: result.model });
   } catch (err) {
     return fallback({ aiError: err.message });
   }

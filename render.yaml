@@ -38,6 +38,9 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      # Open models (Groq by default): answer first, Gemini is the fallback. Leave empty for Gemini only.
+      - key: AI_API_KEY
+        sync: false
       # Plaid (banks and credit cards). Leave empty to turn it off.
       - key: PLAID_CLIENT_ID
         sync: false
