@@ -84,7 +84,7 @@ export default function RescuePlan({ rescue, onChanged, onApproved }) {
 
       <details className="trace">
         <summary>How {source === 'ai' ? 'the agent' : 'this was'} planned this ({trace.length} steps)</summary>
-        <ol>{trace.map((t, n) => <li key={n}>{t.text}</li>)}</ol>
+        <ol>{trace.map((t, n) => <li key={n} style={{ '--i': n }}>{t.text}</li>)}</ol>
       </details>
 
       <div className="plan-actions">

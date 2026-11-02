@@ -1,6 +1,7 @@
 import { usd, STATUS_TEXT, PLAN_STATUS } from '../api.js';
 import { Icon } from './Icons.jsx';
-import { CountUp } from './Motion.jsx';
+import { CountUp, useTilt } from './Motion.jsx';
+import { monthShort } from '../api.js';
 
 function Meter({ budget }) {
   const total = Math.max(budget.budgetCents, budget.spentCents + budget.upcomingRecurringCents);
@@ -10,8 +11,8 @@ function Meter({ budget }) {
     <div className="meter-wrap">
       <div className="meter" role="img" aria-label={`Spent ${usd(budget.spentCents)} and ${usd(budget.upcomingRecurringCents)} in bills still to come, of a ${usd(budget.budgetCents)} budget. ${Math.round(budget.monthElapsedPct)}% of the month has passed.`}>
         <div className="meter-fill">
-          <span style={{ width: pct(budget.spentCents), background: 'var(--series-1)' }} />
-          {budget.upcomingRecurringCents > 0 && <span style={{ width: pct(budget.upcomingRecurringCents), background: 'var(--series-1-soft)' }} />}
+          <span style={{ width: pct(budget.spentCents), background: 'var(--meter-spent, var(--series-1))' }} />
+          {budget.upcomingRecurringCents > 0 && <span style={{ width: pct(budget.upcomingRecurringCents), background: 'var(--meter-bills, var(--series-1-soft))' }} />}
         </div>
       </div>
       <i className="today" style={{ left: `${today}%` }} aria-hidden="true" />
@@ -40,31 +41,56 @@ function Outlook({ budget, top }) {
   );
 }
 
-// The headline: what's safe to spend for the rest of the month.
-export function SummaryCard({ budget, spikes, onSetBudget }) {
+// The shield, as on the card.
+const Emblem = () => (
+  <span className="vault-emblem" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z" /><path d="M9 12l2 2 4-4" />
+    </svg>
+  </span>
+);
+
+// The headline, as a dark metal card: what's safe to spend for the rest of the month.
+// It tilts toward the pointer; everything on it is also in plain text for screen readers.
+export function SummaryCard({ budget, spikes, month, onSetBudget }) {
   const top = spikes[0];
+  const tilt = useTilt();
+  const foot = (
+    <div className="vault-foot" aria-hidden="true">
+      <span className="vault-chip" />
+      <span>Budget Guardian · {monthShort(month)}</span>
+    </div>
+  );
   if (!budget.set) {
     return (
-      <section className="card summary" aria-label="This month">
-        <p className="eyebrow">This month so far</p>
-        <p className="hero-figure">{usd(budget.spentCents)}</p>
-        <p className="hero-sub">spent, heading for {usd(budget.projectedCents)} (usual month {usd(budget.usualCents)}).</p>
+      <section className="vault" aria-label="This month">
+        <div className="vault-card" ref={tilt}>
+          <span className="vault-sheen" aria-hidden="true" />
+          <div className="vault-top"><span className="vault-label">This month so far</span><Emblem /></div>
+          <p className="vault-figure"><CountUp value={budget.spentCents} format={usd} /></p>
+          <p className="vault-sub">spent, heading for <strong>{usd(budget.projectedCents)}</strong> (usual month {usd(budget.usualCents)})</p>
+          <button type="button" className="btn" style={{ marginTop: 18 }} onClick={onSetBudget}>Set a budget</button>
+          {foot}
+        </div>
         <div className="callout ok"><Icon name="wallet" size={18} /><span>Set a monthly budget to see what's safe to spend each day.</span></div>
-        <button type="button" className="btn" style={{ marginTop: 14 }} onClick={onSetBudget}>Set a budget</button>
       </section>
     );
   }
   return (
-    <section className="card summary" aria-label="Safe to spend">
-      <p className="eyebrow">Safe to spend · {budget.daysLeft} day{budget.daysLeft === 1 ? '' : 's'} left</p>
-      <p className="hero-figure"><CountUp value={Math.max(0, budget.safeToSpendCents)} format={usd} /></p>
-      <p className="hero-sub">About <strong>{usd(budget.perDayCents)} a day</strong> of your {usd(budget.budgetCents)} monthly budget</p>
-      <Meter budget={budget} />
-      <div className="rows">
-        <div className="row"><span className="key"><span className="swatch" style={{ background: 'var(--series-1)' }} />Spent</span><strong>{usd(budget.spentCents)} · {Math.round(budget.spentPct)}%</strong></div>
-        <div className="row"><span className="key"><span className="swatch" style={{ background: 'var(--series-1-soft)' }} />Bills still to come</span><strong>{usd(budget.upcomingRecurringCents)}</strong></div>
-        <div className="row"><span className="key"><span className="swatch line" style={{ background: 'var(--ink)' }} />Month passed</span><strong>{Math.round(budget.monthElapsedPct)}%</strong></div>
-        <div className="row"><span className="key">Projected month</span><strong>{usd(budget.projectedCents)}</strong></div>
+    <section className="vault" aria-label="Safe to spend">
+      <div className="vault-card" ref={tilt}>
+        <span className="vault-sheen" aria-hidden="true" />
+        <div className="vault-top"><span className="vault-label">Safe to spend · {budget.daysLeft} day{budget.daysLeft === 1 ? '' : 's'} left</span><Emblem /></div>
+        <p className="vault-figure"><CountUp value={Math.max(0, budget.safeToSpendCents)} format={usd} ms={900} /></p>
+        <p className="vault-sub">About <strong>{usd(budget.perDayCents)} a day</strong> of your {usd(budget.budgetCents)} monthly budget</p>
+        <Meter budget={budget} />
+        <div className="rows">
+          <div className="row"><span className="key"><span className="swatch" style={{ background: 'var(--meter-spent)' }} />Spent</span><strong>{usd(budget.spentCents)} · {Math.round(budget.spentPct)}%</strong></div>
+          <div className="row"><span className="key"><span className="swatch" style={{ background: 'var(--meter-bills)' }} />Bills still to come</span><strong>{usd(budget.upcomingRecurringCents)}</strong></div>
+          <div className="row"><span className="key"><span className="swatch line" style={{ background: 'var(--vault-ink)' }} />Month passed</span><strong>{Math.round(budget.monthElapsedPct)}%</strong></div>
+          <div className="row"><span className="key">Projected month</span><strong>{usd(budget.projectedCents)}</strong></div>
+        </div>
+        {foot}
       </div>
       <Outlook budget={budget} top={top} />
     </section>
@@ -83,7 +109,7 @@ export function SavingsCard({ approvals, month, savingsById }) {
   const co2 = thisMonth.reduce((s, a) => s + (savingsById.get(a.optionId)?.co2AvoidedKg ?? 0), 0);
   return (
     <section className="card" aria-label="Savings">
-      <p className="eyebrow muted">Moved to savings this month</p>
+      <p className="eyebrow">Moved to savings this month</p>
       <p className="savings-figure"><CountUp value={saved} format={usd} /></p>
       <div className="mini-stats">
         <div className="mini-stat"><div className="label"><Icon name="check" size={12} />Plans approved</div><div className="value">{thisMonth.length}</div></div>
