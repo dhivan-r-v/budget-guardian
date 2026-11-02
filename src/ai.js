@@ -23,8 +23,8 @@ const useOpenAI = () => Boolean(openaiKey()) && env('AI_PROVIDER') !== 'gemini';
 
 const GEMINI_MODEL = env('GEMINI_MODEL') || 'gemini-flash-lite-latest';
 // Model names, used in cache keys (a different model means fresh answers) and shown in the UI.
-export const AI_MODEL = useOpenAI() ? env('AI_MODEL') || 'qwen/qwen3-32b' : GEMINI_MODEL;
-export const AGENT_MODEL = useOpenAI() ? env('AI_AGENT_MODEL') || env('AI_MODEL') || 'moonshotai/kimi-k2-instruct' : GEMINI_MODEL;
+export const AI_MODEL = useOpenAI() ? env('AI_MODEL') || 'qwen/qwen3.8-27b' : GEMINI_MODEL;
+export const AGENT_MODEL = useOpenAI() ? env('AI_AGENT_MODEL') || env('AI_MODEL') || 'openai/gpt-oss-120b' : GEMINI_MODEL;
 
 export function aiAvailable() {
   return Boolean(openaiKey() || geminiKey());
@@ -54,7 +54,12 @@ async function withFallback(openaiCall, geminiCall) {
 
 // --- OpenAI-compatible provider
 
-async function openaiRequest(body, timeoutMs, fetchImpl = fetch) {
+// Free tiers limit tokens per minute and answer 429 with "try again in 1.2s"; a short wait
+// like that is worth one retry.
+const MAX_RETRY_WAIT_MS = 10_000;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function openaiRequest(body, timeoutMs, fetchImpl = fetch, retried = false) {
   const base = (env('AI_BASE_URL') || GROQ).replace(/\/$/, '');
   const res = await fetchImpl(`${base}/chat/completions`, {
     method: 'POST',
@@ -63,6 +68,14 @@ async function openaiRequest(body, timeoutMs, fetchImpl = fetch) {
     signal: AbortSignal.timeout(timeoutMs),
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 429 && !retried) {
+    const m = String(data.error?.message ?? '').match(/try again in ([\d.]+)(ms|s)/i);
+    const waitMs = m ? Number(m[1]) * (m[2].toLowerCase() === 's' ? 1000 : 1) + 250 : null;
+    if (waitMs !== null && waitMs <= MAX_RETRY_WAIT_MS) {
+      await sleep(waitMs);
+      return openaiRequest(body, timeoutMs, fetchImpl, true);
+    }
+  }
   if (!res.ok) throw new AIError('openai', res.status, data.error?.message ?? `request failed (${res.status})`);
   const message = data.choices?.[0]?.message;
   if (!message) throw new AIError('openai', 502, 'empty response');
@@ -195,8 +208,18 @@ export function generateJson({ system, prompt, schema, timeoutMs = DEFAULT_TIMEO
   return withFallback(() => openaiJson(args, fetchImpl), () => geminiJson(args));
 }
 
-// One turn of a tool-using conversation. Returns the model's turn to append (Gemini
-// format), the tool calls it asked for, and any text.
+// The agent's providers, in order: the open model, then Gemini. A conversation can't move
+// from one to the other halfway (Gemini requires its own signatures on earlier tool calls),
+// so the caller restarts with the next provider instead.
+export function agentProviders({ fetchImpl } = {}) {
+  const out = [];
+  if (useOpenAI()) out.push(Object.assign((args) => openaiChatTurn({ timeoutMs: DEFAULT_TIMEOUT_MS, ...args }, fetchImpl), { model: AGENT_MODEL }));
+  if (geminiKey()) out.push(Object.assign((args) => geminiChatTurn({ timeoutMs: DEFAULT_TIMEOUT_MS, ...args }), { model: GEMINI_MODEL }));
+  return out;
+}
+
+// One turn of a tool-using conversation, with the first available provider. Returns the
+// model's turn to append (Gemini format), the tool calls it asked for, and any text.
 export function chatTurn({ system, contents, functionDeclarations, timeoutMs = DEFAULT_TIMEOUT_MS }, { fetchImpl } = {}) {
   const args = { system, contents, functionDeclarations, timeoutMs };
   return withFallback(() => openaiChatTurn(args, fetchImpl), () => geminiChatTurn(args));

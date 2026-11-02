@@ -21,10 +21,10 @@ function fakeFetch(answer, status = 200) {
   return { requests, fetchImpl };
 }
 
-test('open models are the default: Qwen for JSON, Kimi K2 for the agent', () => {
+test('open models are the default: Qwen for JSON, gpt-oss-120b for the agent', () => {
   assert.equal(ai.aiAvailable(), true);
-  assert.equal(ai.AI_MODEL, 'qwen/qwen3-32b');
-  assert.equal(ai.AGENT_MODEL, 'moonshotai/kimi-k2-instruct');
+  assert.equal(ai.AI_MODEL, 'qwen/qwen3.8-27b');
+  assert.equal(ai.AGENT_MODEL, 'openai/gpt-oss-120b');
 });
 
 test('JSON answers are parsed even with reasoning or a code fence around them', async () => {
@@ -38,7 +38,7 @@ test('JSON answers are parsed even with reasoning or a code fence around them', 
   const [req] = requests;
   assert.equal(req.url, 'https://llm.example.com/v1/chat/completions');
   assert.equal(req.headers.Authorization, 'Bearer test-key');
-  assert.equal(req.body.model, 'qwen/qwen3-32b');
+  assert.equal(req.body.model, 'qwen/qwen3.8-27b');
   assert.deepEqual(req.body.response_format, { type: 'json_object' });
   assert.match(req.body.messages[0].content, /^S\n\nAnswer with one JSON object only, matching this JSON schema:\n\{"type":"object"\}$/);
 });
@@ -91,6 +91,6 @@ test("the agent's tool calls come back in the app's format", async () => {
     { name: 'getPlanHistory', args: {} },
   ]);
   assert.deepEqual(turn.content.parts.map((p) => p.functionCall.name), ['getSpikes', 'simulate', 'getPlanHistory']);
-  assert.equal(requests[0].body.model, 'moonshotai/kimi-k2-instruct');
+  assert.equal(requests[0].body.model, 'openai/gpt-oss-120b');
   assert.deepEqual(requests[0].body.tools[0], { type: 'function', function: { name: 'getSpikes', description: 'd', parameters: { type: 'object', properties: {} } } });
 });
