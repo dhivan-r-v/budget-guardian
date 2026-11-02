@@ -434,26 +434,27 @@ export function sampleStatement(end = today(), seed = 7) {
   const start = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth() - 3, 1));
   const lines = [];
   const add = (d, details, debit, credit) => lines.push({ d, details, debit, credit });
+  // Fictional merchants, written the way card networks print names.
   const merchants = [
-    ['SQ *BLUE BOTTLE COFFEE', 450, 650, 0.35],
-    ['CHIPOTLE 2291', 1100, 1600, 0.12],
-    ['TRADER JOE S #552', 3500, 7500, 0.12],
-    ['UBER   *TRIP HELP.UBER.COM', 1200, 2600, 0.1],
-    ['AMZN Mktp US*2K4L19', 1500, 4500, 0.08],
+    ['SQ *BEAN THERE COFFEE', 450, 650, 0.35],
+    ['BURRITO BOWL CO 2291', 1100, 1600, 0.12],
+    ['GREENLEAF MARKET #552', 3500, 7500, 0.12],
+    ['RIDESHARE *TRIP 8812', 1200, 2600, 0.1],
+    ['SHOPNEST ONLINE ORDER', 1500, 4500, 0.08],
   ];
   for (let d = new Date(start); d <= endDate; d = new Date(d.getTime() + 86_400_000)) {
     const day = d.getUTCDate();
     for (const [name, lo, hi, p] of merchants) if (rand() < p) add(new Date(d), name, lo + Math.round(rand() * (hi - lo)), null);
-    if (day === 7) add(new Date(d), 'NETFLIX.COM', 1549, null);
-    if (day === 15) add(new Date(d), 'VERIZON WIRELESS', 6500, null);
+    if (day === 7) add(new Date(d), 'STREAMBOX.COM', 1549, null);
+    if (day === 15) add(new Date(d), 'BREEZE MOBILE PHONE BILL', 6500, null);
     if (day === 20) add(new Date(d), 'PAYMENT THANK YOU', null, 60000);
-    if (day === 11 && rand() < 0.5) add(new Date(d), 'PAYPAL *SHELLOIL', 4210, null);
+    if (day === 11 && rand() < 0.5) add(new Date(d), 'PAYPAL *METROFUEL', 4210, null);
   }
   // This month: a new laptop and a concert, so the card's shopping and entertainment spike.
   const thisMonth = (day) => new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), Math.min(day, endDate.getUTCDate())));
-  add(thisMonth(2), 'BEST BUY 00012385', 74999, null);
-  add(thisMonth(3), 'TICKETMASTER *CONCERT', 18900, null);
-  add(thisMonth(4), 'AMZN Mktp US RETURN', null, 2399);
+  add(thisMonth(2), 'GADGETHUB 00012385', 74999, null);
+  add(thisMonth(3), 'TICKETBAY *CONCERT', 18900, null);
+  add(thisMonth(4), 'SHOPNEST RETURN', null, 2399);
   lines.sort((a, b) => a.d - b.d);
   const fmt = (d) => `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
   const money = (c) => (c === null ? '' : `"${(c / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}"`);

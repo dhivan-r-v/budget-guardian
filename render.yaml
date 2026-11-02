@@ -28,6 +28,10 @@ services:
       # judge's approvals, uploads or connected banks never change what the next one sees.
       - key: WORKSPACES
         value: "1"
+      # Real sandbox payouts are limited so the shared sandbox account lasts through judging:
+      # at most this many dollars a day across all visitors, and 8 approvals per visitor a day.
+      - key: DEMO_PAYOUT_DAILY_CAP_USD
+        value: "300"
       - key: PAYPAL_BASE_URL
         value: https://api-m.sandbox.paypal.com
       - key: PAYPAL_CLIENT_ID

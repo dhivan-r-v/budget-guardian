@@ -109,7 +109,7 @@ export function SavingsCard({ approvals, month, savingsById }) {
   const co2 = thisMonth.reduce((s, a) => s + (savingsById.get(a.optionId)?.co2AvoidedKg ?? 0), 0);
   return (
     <section className="card" aria-label="Savings">
-      <p className="eyebrow">Moved to savings this month</p>
+      <p className="eyebrow">Moved to savings with PayPal this month</p>
       <p className="savings-figure"><CountUp value={saved} format={usd} /></p>
       <div className="mini-stats">
         <div className="mini-stat"><div className="label"><Icon name="check" size={12} />Plans approved</div><div className="value">{thisMonth.length}</div></div>

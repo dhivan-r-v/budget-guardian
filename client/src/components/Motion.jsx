@@ -113,7 +113,13 @@ export function useReveal(deps) {
       order = 0;
     }, { rootMargin: '0px 0px -8% 0px' });
     els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
+    // Safety net: content must never stay hidden (a slow device, a full-page screenshot,
+    // an automated reviewer), so whatever hasn't risen in yet appears after a moment.
+    const fallback = setTimeout(() => els.forEach((el) => el.classList.add('in')), 2500);
+    return () => {
+      clearTimeout(fallback);
+      io.disconnect();
+    };
   }, deps);
 }
 
