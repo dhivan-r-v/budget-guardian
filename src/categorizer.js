@@ -178,6 +178,13 @@ const RULES = [
   ['food', /\b(starbucks|dunkin|coffee|cafe|restaurant|pizza|domino'?s|chipotle|mcdonald'?s|subway|doordash|uber ?eats|grubhub|grocer(y|ies)|trader joe'?\s?s|kroger|aldi|whole foods)\b/i],
   ['transport', /\b(uber|lyft|metro|transit|parking|train|bus)\b/i],
   ['bills', /\b(verizon|at&t|t-mobile|comcast|xfinity|electric|utility|utilities|insurance)\b/i],
+  // The demo's fictional merchants (seed history and sample statement).
+  ['fuel', /\b(metro ?fuel|sunrise gas|highway petrol|quickstop fuel|warehouse gas)\b/i],
+  ['entertainment', /\b(streambox|tunewave|familyflix|cliptube|ticketbay|starlight cinemas|pixelplay|arcade arena)\b/i],
+  ['food', /\b(bean there|burrito bowl|greenleaf|valuemart|freshway|thrifty foods|dasheats|rideeats|slice pizza|taco corner|bread & bowl|morning donuts)\b/i],
+  ['transport', /\b(rideshare)\b/i],
+  ['shopping', /\b(shopnest|gadgethub|threadline|craftnook|bullseye store)\b/i],
+  ['bills', /\b(breeze mobile|ironhouse gym)\b/i],
   ['shopping', /\b(amazon|target|walmart|best ?buy|ebay|etsy|ikea|h&m|zara)\b/i],
 ];
 // Plaid's own categories (kept in the description of Plaid rows), e.g. TRANSPORTATION_GAS.

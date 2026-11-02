@@ -5,6 +5,8 @@
 // every ~2.6 days at higher prices (at least 2, so the spike shows from day 2), against ~4 a
 // month before. Entertainment has 4 recurring subscriptions plus occasional one-offs.
 // Seeding replaces seed rows only; PayPal rows and approvals are never touched.
+// Merchant names are fictional (the demo is filmed and published), but say what they sell,
+// so the categorizer can still read them.
 
 // Deterministic PRNG (mulberry32) so the demo data is identical for the same inputs.
 function mulberry32(a) {
@@ -18,31 +20,31 @@ function mulberry32(a) {
 }
 
 const SUBSCRIPTIONS = [
-  { day: 3, merchant: 'Netflix', description: 'Netflix Standard plan', cents: 1549 },
-  { day: 8, merchant: 'Spotify', description: 'Spotify Premium Individual', cents: 1199 },
-  { day: 19, merchant: 'Disney+', description: 'Disney+ Basic', cents: 999 },
-  { day: 24, merchant: 'YouTube Premium', description: 'YouTube Premium membership', cents: 1399 },
+  { day: 3, merchant: 'StreamBox', description: 'StreamBox Standard streaming plan', cents: 1549 },
+  { day: 8, merchant: 'TuneWave', description: 'TuneWave Premium music subscription', cents: 1199 },
+  { day: 19, merchant: 'FamilyFlix', description: 'FamilyFlix Basic streaming plan', cents: 999 },
+  { day: 24, merchant: 'ClipTube Premium', description: 'ClipTube Premium video membership', cents: 1399 },
 ];
 const BILLS = [
-  { day: 5, merchant: 'Planet Fitness', description: 'Monthly membership', cents: 1500 },
-  { day: 12, merchant: 'Mint Mobile', description: 'Unlimited plan', cents: 3000 },
+  { day: 5, merchant: 'IronHouse Gym', description: 'Monthly gym membership', cents: 1500 },
+  { day: 12, merchant: 'Breeze Mobile', description: 'Unlimited phone plan', cents: 3000 },
 ];
-const FUEL_STATIONS = ['Shell', 'Chevron', 'ExxonMobil', 'BP', 'Costco Gas'];
-const GROCERY = ["Trader Joe's", 'Walmart', 'Kroger', 'Aldi'];
-const DINING = ['Chipotle', 'DoorDash', 'Uber Eats', 'Panera Bread', 'Taco Bell', "Domino's"];
-const COFFEE = ['Starbucks', 'Dunkin'];
+const FUEL_STATIONS = ['Metro Fuel', 'Sunrise Gas', 'Highway Petrol', 'QuickStop Fuel', 'Warehouse Gas'];
+const GROCERY = ['GreenLeaf Market', 'ValueMart Grocery', 'FreshWay Grocery', 'Thrifty Foods'];
+const DINING = ['Burrito Bowl Co.', 'DashEats delivery', 'RideEats delivery', 'Bread & Bowl Cafe', 'Taco Corner', 'Slice Pizza'];
+const COFFEE = ['Bean There Coffee', 'Morning Donuts & Coffee'];
 const SHOPPING = [
-  ['Amazon', 'Amazon.com order'],
-  ['Target', 'Target purchase'],
-  ['Best Buy', 'Electronics accessory'],
-  ['H&M', 'Clothing'],
-  ['Etsy', 'Etsy order'],
+  ['ShopNest', 'ShopNest online order'],
+  ['Bullseye Store', 'Department store purchase'],
+  ['GadgetHub', 'Electronics accessory'],
+  ['Threadline', 'Clothing'],
+  ['CraftNook', 'Handmade marketplace order'],
 ];
 const ENTERTAINMENT_ONE_OFF = [
-  ['AMC Theatres', 'Movie tickets', 1400, 2800],
-  ['Steam', 'Game purchase', 999, 3999],
-  ['Ticketmaster', 'Concert ticket', 4500, 8500],
-  ["Dave & Buster's", 'Arcade night', 2000, 4000],
+  ['Starlight Cinemas', 'Movie tickets', 1400, 2800],
+  ['PixelPlay', 'Game purchase', 999, 3999],
+  ['TicketBay', 'Concert ticket', 4500, 8500],
+  ['Arcade Arena', 'Arcade night', 2000, 4000],
 ];
 // The demo user's choices: flexible categories, and a monthly budget a bit above their
 // usual month (~$965), so a spike is what pushes the month over.
