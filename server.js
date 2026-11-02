@@ -14,6 +14,7 @@ import { today } from './src/spikes.js';
 import { getAccessToken, paypal } from './src/paypal.js';
 import { ApprovalError, approve, retry, refresh, getApproval, listApprovals, withFollowThrough } from './src/approvals.js';
 import { rescuePlan, approveRescue } from './src/rescue.js';
+import { PlaidError, plaidConfig, connect as connectPlaid, disconnect as disconnectPlaid, listItems as plaidItems, syncPlaid, plaidClient } from './src/plaid.js';
 import { StatementError, previewStatement, importStatement, listImports, removeImport, sampleStatement } from './src/statements.js';
 import { vapidKeys, subscribe, unsubscribe, isSubscribed, pushSender, runAlerts, listAlerts, deviceCount } from './src/alerts.js';
 
@@ -295,8 +296,8 @@ const statementRoute = (handler) => async (req, res, next) => {
   }
 };
 
-// Labels newly imported purchases (the LLM first, then name rules for what it couldn't),
-// then checks for new spikes. In the background: the dashboard polls the import list.
+// Labels new purchases from uploads and Plaid (the LLM first, then name rules for what it
+// couldn't), then checks for new spikes. In the background: the dashboard polls.
 let labeling = null;
 function labelImported() {
   labeling ??= categorize(db)
@@ -331,6 +332,80 @@ app.get('/api/statements/sample.csv', (req, res) => {
   res.type('text/csv').attachment('sample-card-statement.csv').send(sampleStatement());
 });
 
+// --- Plaid: banks and credit cards connected through Plaid Link.
+const plaidRoute = (handler) => async (req, res, next) => {
+  try {
+    await handler(req, res);
+  } catch (err) {
+    if (err instanceof PlaidError) return res.status(err.status >= 500 ? 502 : err.status).json({ error: err.message, details: err.details?.error_code });
+    next(err);
+  }
+};
+
+app.get('/api/plaid/status', (req, res) => {
+  const config = plaidConfig();
+  res.json({ configured: config.configured, env: config.env, items: plaidItems(db) });
+});
+
+// A short-lived token that opens Plaid Link in the browser.
+const publicUrl = () => (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/$/, '');
+app.post('/api/plaid/link-token', plaidRoute(async (req, res) => {
+  const webhook = publicUrl() ? `${publicUrl()}/api/plaid/webhook` : undefined;
+  res.json({ linkToken: await plaidClient.createLinkToken({ webhook }) });
+}));
+
+// Plaid Link finished: { publicToken, institution }. Transactions follow in the background.
+let plaidSyncing = null;
+const syncPlaidNow = () => {
+  plaidSyncing ??= syncPlaid(db)
+    .then((r) => { if (r.some((x) => x.added || x.updated || x.removed)) labelImported(); return r; })
+    .finally(() => { plaidSyncing = null; });
+  return plaidSyncing;
+};
+app.post('/api/plaid/exchange', plaidRoute(async (req, res) => {
+  const itemId = await connectPlaid(db, { publicToken: req.body?.publicToken, institution: req.body?.institution });
+  syncPlaidNow().catch((err) => console.error('Plaid sync failed:', err.message));
+  res.status(201).json({ itemId });
+}));
+
+// Sync now. At most once every 15 seconds.
+let lastPlaidSync = 0;
+app.post('/api/plaid/sync', plaidRoute(async (req, res) => {
+  if (!plaidSyncing && Date.now() - lastPlaidSync < 15_000) return res.status(429).json({ error: 'synced less than 15 seconds ago' });
+  lastPlaidSync = Date.now();
+  res.json({ results: await syncPlaidNow(), labeling: Boolean(labeling) });
+}));
+
+app.delete('/api/plaid/items/:id', plaidRoute(async (req, res) => {
+  res.json(await disconnectPlaid(db, req.params.id));
+}));
+
+// Sandbox only, for demos: a card purchase on the first connected sandbox account
+// ({ amount: 89.4, description: 'SHELL OIL 57444' }). Needs ADMIN_TOKEN when one is set.
+app.post('/api/plaid/sandbox-purchase', plaidRoute(async (req, res) => {
+  const token = process.env.ADMIN_TOKEN?.trim();
+  if (token && req.get('Authorization') !== `Bearer ${token}`) return res.status(401).json({ error: 'admin token required' });
+  if (plaidConfig().env !== 'sandbox') return res.status(403).json({ error: 'only in the Plaid sandbox' });
+  const amount = Number(req.body?.amount);
+  const description = String(req.body?.description ?? '').trim();
+  if (!(amount > 0 && amount < 10_000) || !description) return res.status(400).json({ error: 'amount (dollars) and description are required' });
+  const item = db.prepare('SELECT access_token, institution FROM plaid_items ORDER BY created_at LIMIT 1').get();
+  if (!item) return res.status(404).json({ error: 'connect a sandbox account first' });
+  const date = today();
+  await plaidClient.createSandboxTransaction(item.access_token, { amount, description, date_transacted: date, date_posted: date, iso_currency_code: 'USD' });
+  await plaidClient.refresh(item.access_token).catch(() => null);
+  // Plaid's webhook triggers a sync on a public server; this covers local runs.
+  setTimeout(() => syncPlaidNow().catch(() => null), 15_000).unref();
+  res.status(201).json({ ok: true, institution: item.institution, amount, description, date });
+}));
+
+// Plaid calls this when new transactions are ready. It only ever triggers a sync, which
+// fetches from Plaid itself, so a forged call can't inject anything.
+app.post('/api/plaid/webhook', (req, res) => {
+  if (req.body?.webhook_type === 'TRANSACTIONS') syncPlaidNow().catch((err) => console.error('Plaid sync failed:', err.message));
+  res.json({ ok: true });
+});
+
 // --- PayPal sync: pull new transactions, label new merchants, keep the demo current.
 // Runs at startup and every SYNC_INTERVAL_MINUTES (default 15); the dashboard can also ask.
 let syncing = null;
@@ -339,7 +414,9 @@ async function runSync() {
     // DEMO_ROLLING: the seeded history is regenerated to end today when a new day starts,
     // so a long-running demo always has a current month. PayPal rows are never touched.
     if (process.env.DEMO_ROLLING === '1') seedDemoIfStale(db, { end: today() });
-    const result = await syncPayPal(db);
+    // Plaid first: a PayPal failure shouldn't stop card spending from arriving.
+    const plaid = plaidConfig().configured ? await syncPlaid(db).catch((err) => [{ error: err.message }]) : [];
+    const result = { ...(await syncPayPal(db)), plaid };
     // Label new merchants: the LLM first, then name rules for obvious PayPal merchants.
     const labels = await categorize(db).catch((err) => ({ errors: [err.message] }));
     const byRules = labelByRules(db);

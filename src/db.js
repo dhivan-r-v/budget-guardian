@@ -9,7 +9,8 @@ export const DB_PATH = process.env.DB_PATH ?? path.resolve('data', 'budget-guard
 // `seed_category` / `seed_recurring` are ground truth from the seed script,
 // used only to check the categorizer's accuracy.
 // source: seed (demo history), paypal (Transaction Search), statement (an uploaded bank or
-// card statement; import_id says which upload).
+// card statement), plaid (a bank or card connected through Plaid). import_id says which
+// upload or Plaid connection a row came from.
 const TRANSACTIONS = `
 CREATE TABLE IF NOT EXISTS transactions (
   id             TEXT PRIMARY KEY,
@@ -18,7 +19,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   currency       TEXT    NOT NULL DEFAULT 'USD',
   merchant       TEXT    NOT NULL,
   description    TEXT,
-  source         TEXT    NOT NULL CHECK (source IN ('seed', 'paypal', 'statement')),
+  source         TEXT    NOT NULL CHECK (source IN ('seed', 'paypal', 'statement', 'plaid')),
   category       TEXT,
   is_recurring   INTEGER,
   seed_category  TEXT,
@@ -31,6 +32,19 @@ const TRANSACTION_COLUMNS = 'id, occurred_at, amount_cents, currency, merchant, 
 const SCHEMA = `
 ${TRANSACTIONS};
 CREATE INDEX IF NOT EXISTS idx_transactions_occurred_at ON transactions (occurred_at);
+
+-- Banks and cards connected through Plaid. The access token stays on the server; cursor is
+-- where the last /transactions/sync left off.
+CREATE TABLE IF NOT EXISTS plaid_items (
+  item_id      TEXT PRIMARY KEY,
+  access_token TEXT NOT NULL,
+  institution  TEXT NOT NULL,
+  accounts     TEXT,
+  cursor       TEXT,
+  last_sync_at TEXT,
+  error        TEXT,
+  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
 
 -- Uploaded statements, so an upload can be listed and removed again.
 CREATE TABLE IF NOT EXISTS statement_imports (
@@ -139,15 +153,16 @@ export function openDb(file = DB_PATH) {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
-  // Databases from before statement uploads: SQLite can't change a CHECK constraint, so the
-  // transactions table is rebuilt with the new one (and the import_id column).
+  // Databases from before statement uploads and Plaid: SQLite can't change a CHECK
+  // constraint, so the transactions table is rebuilt with the new one (and import_id).
   const tx = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'transactions'").get();
-  if (!tx.sql.includes("'statement'")) {
+  if (!tx.sql.includes("'plaid'")) {
     db.exec('BEGIN');
     try {
       db.exec('ALTER TABLE transactions RENAME TO transactions_old');
       db.exec(TRANSACTIONS);
-      db.exec(`INSERT INTO transactions (${TRANSACTION_COLUMNS}) SELECT ${TRANSACTION_COLUMNS} FROM transactions_old`);
+      const cols = db.prepare('PRAGMA table_info(transactions_old)').all().some((c) => c.name === 'import_id') ? `${TRANSACTION_COLUMNS}, import_id` : TRANSACTION_COLUMNS;
+      db.exec(`INSERT INTO transactions (${cols}) SELECT ${cols} FROM transactions_old`);
       db.exec('DROP TABLE transactions_old');
       db.exec('CREATE INDEX IF NOT EXISTS idx_transactions_occurred_at ON transactions (occurred_at)');
       db.exec('COMMIT');

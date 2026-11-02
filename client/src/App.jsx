@@ -4,6 +4,7 @@ import { Icon } from './components/Icons.jsx';
 import CategoryCard from './components/CategoryCard.jsx';
 import RescuePlan from './components/RescuePlan.jsx';
 import StatementUpload from './components/StatementUpload.jsx';
+import PlaidConnect from './components/PlaidConnect.jsx';
 import { SummaryCard, SavingsCard } from './components/Summary.jsx';
 import { Habits, PayPalPanel } from './components/Feed.jsx';
 import { BudgetSetting, Preferences, AlertsSetting } from './components/Settings.jsx';
@@ -152,7 +153,12 @@ export default function App() {
 
           <Section title="From your PayPal account"><PayPalPanel status={paypalStatus} transactions={paypalTransactions} onChanged={refresh} /></Section>
 
-          <Section title="Cards and other banks" note="statement upload"><StatementUpload onChanged={refresh} onImported={setToast} /></Section>
+          <Section title="Cards and other banks">
+            <div className="stack">
+              <div className="card"><PlaidConnect onChanged={refresh} onConnected={setToast} /></div>
+              <StatementUpload onChanged={refresh} onImported={setToast} />
+            </div>
+          </Section>
 
           <div ref={settingsRef}>
             <Section title="Settings">
