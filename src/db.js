@@ -148,11 +148,21 @@ const ADDED_COLUMNS = {
   approvals: { plan_since: 'TEXT', plan_allowance_cents: 'INTEGER', plan_merchants: 'TEXT' },
 };
 
-export function openDb(file = DB_PATH) {
+// `shared`: the path of the shared database, for a visitor's own database (see
+// workspaces.js). It is attached as "shared", and the visitor's database drops its own
+// ai_cache, so every unqualified ai_cache query resolves to the shared one: identical facts
+// never spend AI quota twice, whoever asks.
+export function openDb(file = DB_PATH, { shared } = {}) {
   mkdirSync(path.dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL;');
+  // Several connections share files (the shared database is attached to every visitor's).
+  db.exec('PRAGMA busy_timeout = 5000;');
   db.exec(SCHEMA);
+  if (shared) {
+    db.exec('DROP TABLE IF EXISTS main.ai_cache');
+    db.prepare('ATTACH DATABASE ? AS shared').run(shared);
+  }
   // Databases from before statement uploads and Plaid: SQLite can't change a CHECK
   // constraint, so the transactions table is rebuilt with the new one (and import_id).
   const tx = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'transactions'").get();
