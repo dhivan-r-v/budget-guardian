@@ -34,52 +34,37 @@ To protect the shared sandbox account until judging ends, the demo moves at most
 ## Architecture
 
 ```mermaid
-flowchart TB
-  IN["1 · Spending comes in<br/>PayPal Transaction Search every 15 min<br/>banks and cards via Plaid · CSV statements"]
-
-  subgraph SERVER["Budget Guardian server · Node.js + Express on Render"]
-    DB[("SQLite on a persistent disk<br/>a workspace per visitor")]
-    CODE["2 · Code does the math<br/>spikes, projections, causes,<br/>savings options, simulator"]
-    AI["3 · AI writes and plans<br/>explanations: Qwen 3.8<br/>rescue plan agent: gpt-oss-120b<br/>via Groq, Gemini as fallback"]
-    CHECK["4 · Validators<br/>only options code offered,<br/>only numbers code computed"]
-    APPROVE["6 · Approval<br/>recompute the amount,<br/>daily limits, balance check"]
-  end
-
-  UI["5 · Dashboard and phone alerts<br/>React web app + Web Push"]
-  YOU(["You approve and confirm"])
-  PP["7 · PayPal moves the money<br/>Balances: enough left?<br/>Payouts: to your savings account, never paid twice"]
-
-  IN --> DB --> CODE
-  CODE -- "facts and tools" --> AI
-  AI --> CHECK
-  CHECK -- "rejected: try again" --> AI
-  CHECK --> UI --> YOU --> APPROVE --> PP
+flowchart LR
+  A["💳 Your spending<br/>PayPal, cards,<br/>bank statements"] --> B["🔢 Code<br/>finds the spike<br/>and does the math"]
+  B --> C["🤖 AI<br/>explains it and<br/>plans a fix"]
+  C --> D["✅ You<br/>approve"]
+  D --> E["💸 PayPal<br/>moves the savings"]
 ```
 
-**Money only moves after you approve:**
+The AI never does the math and never moves money on its own: code checks every number it writes, and nothing reaches PayPal until you approve.
+
+<details>
+<summary>More detail: what happens when you approve</summary>
 
 ```mermaid
 sequenceDiagram
   actor You
-  participant App as Dashboard
-  participant Server as Budget Guardian server
-  participant Agent as AI agent
-  participant PP as PayPal (sandbox)
+  participant App as Budget Guardian
+  participant AI as AI agent
+  participant PP as PayPal
 
-  Server->>PP: Transaction Search (every 15 min)
-  Server->>Server: Detect spike, split cause, list savings options (code)
-  Server->>Agent: Briefing and tools
-  Agent->>Server: Simulate combinations, propose a plan
-  Server->>Server: Validate: offered options only, numbers from code
-  Server-->>App: Rescue plan + the agent's steps
-  You->>App: Approve, then confirm the amount
-  App->>Server: Approve
-  Server->>Server: Recompute the amount, check daily limits
-  Server->>PP: Balances: enough left after the transfer?
-  Server->>PP: Payouts (approval id = sender_batch_id, never pays twice)
-  PP-->>You: Savings arrive in your savings account
-  Server-->>App: Track whether you keep the plan
+  App->>PP: Read spending (Transaction Search)
+  App->>AI: Spike facts and savings options
+  AI->>App: Proposed plan
+  App->>App: Check every number
+  App-->>You: Show the plan
+  You->>App: Approve
+  App->>PP: Check balance (Balances)
+  App->>PP: Move savings (Payouts)
+  PP-->>You: Money in your savings account
 ```
+
+</details>
 
 ## How it's built
 
