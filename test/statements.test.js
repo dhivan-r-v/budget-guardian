@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { seedDemo } from '../src/seed.js';
 import { openDb } from '../src/db.js';
 import { detectSpikes } from '../src/spikes.js';
 import { labelByRules } from '../src/categorizer.js';
@@ -155,15 +156,22 @@ test('files that are not statements get a clear error', async () => {
   await assert.rejects(previewStatement(db, { text: '' }, { useAI: false }), { status: 400 });
 });
 
-test('the sample statement imports and makes the card spending spike', async () => {
+test('the sample statement imports without swamping the demo month', async () => {
   const db = openDb(':memory:');
+  seedDemo(db, { end: ASOF });
+  labelByRules(db);
+  const before = detectSpikes(db, { asOf: ASOF });
   const text = sampleStatement(ASOF);
   const p = await previewStatement(db, { text }, { useAI: false });
   assert.equal(p.counts.invalid, 0);
-  assert.ok(p.counts.purchases > 90);
+  assert.ok(p.counts.purchases > 20);
   assert.ok(p.counts.paypal > 0);
+  assert.ok(p.counts.credits > 0);
   importStatement(db, { text, layout: p.layout }, { asOf: ASOF });
   labelByRules(db);
-  const spikes = detectSpikes(db, { asOf: ASOF }).spikes.map((s) => s.category);
-  assert.ok(spikes.includes('shopping'), spikes.join());
+  const after = detectSpikes(db, { asOf: ASOF });
+  // No new spikes, and the card adds well under $200 to the projected month.
+  assert.deepEqual(after.spikes.map((s) => s.category), before.spikes.map((s) => s.category));
+  const projected = (r) => r.categories.reduce((s, c) => s + c.projectedCents, 0);
+  assert.ok(projected(after) - projected(before) < 20000, String(projected(after) - projected(before)));
 });

@@ -32,6 +32,10 @@ services:
       # at most this many dollars a day across all visitors, and 8 approvals per visitor a day.
       - key: DEMO_PAYOUT_DAILY_CAP_USD
         value: "300"
+      # The sandbox merchant's business name can't be changed, so the demo shows it as a
+      # fictional brand.
+      - key: PAYPAL_MERCHANT_ALIASES
+        value: "Shell Gas Station=Metro Fuel"
       - key: PAYPAL_BASE_URL
         value: https://api-m.sandbox.paypal.com
       - key: PAYPAL_CLIENT_ID

@@ -28,6 +28,7 @@ export function copyPayPal(db) {
     INSERT INTO main.transactions (${COPY_COLUMNS})
     SELECT ${COPY_COLUMNS} FROM shared.transactions WHERE source = 'paypal' AND true
     ON CONFLICT (id) DO UPDATE SET
+      merchant = excluded.merchant,
       category = COALESCE(category, excluded.category),
       is_recurring = COALESCE(is_recurring, excluded.is_recurring)
   `);
