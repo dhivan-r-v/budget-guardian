@@ -2,7 +2,7 @@
 
 An AI agent that watches your PayPal spending, spots sudden spikes, explains what caused them, and plans realistic trade-offs with the exact amount saved. When you approve a plan, it moves the savings with PayPal Payouts. It never acts without your approval.
 
-**Live demo: https://budget-guardian.onrender.com** · Built for the PayPal AI Hackathon · MIT license
+**Live demo: https://budget-guardian.onrender.com** · [Demo video](https://youtu.be/E3c5bfofLw4) · [Devpost](https://devpost.com/software/budget-guardian-y7nq4k) · Built for the PayPal AI Hackathon · MIT license
 
 ## For judges: try it
 
@@ -55,7 +55,7 @@ To protect the shared sandbox account until judging ends, the demo moves at most
 - **Client:** React 18 with Vite.
 - **Integrations:** Plaid (banks and cards), Web Push (alerts).
 - **Hosting:** Render (Blueprint in `render.yaml`, with a persistent disk). Each visitor's demo is a small SQLite file of its own, attached to a shared database for the PayPal sync and the AI cache.
-- **Tests:** 133 tests (`npm test`) and CI on every pull request.
+- **Tests:** 134 tests (`npm test`) and CI on every pull request.
 
 ## Run it yourself
 
