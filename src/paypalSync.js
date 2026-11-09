@@ -63,8 +63,20 @@ export function syncStatus(db) {
   };
 }
 
+// Display names to use for PayPal counterparties, from PAYPAL_MERCHANT_ALIASES
+// ("Old name=New name;Other=Another"). PayPal reports a sandbox merchant by its business
+// name, which can't be changed after the account is created, so a demo can rename it here.
+export function merchantAliases(text = process.env.PAYPAL_MERCHANT_ALIASES) {
+  const map = new Map();
+  for (const pair of (text ?? '').split(';')) {
+    const [from, to] = pair.split('=').map((x) => x?.trim());
+    if (from && to) map.set(from, to);
+  }
+  return map;
+}
+
 // Fetches the last SYNC_DAYS days and stores new spending. `client` and `now` are injectable.
-export async function syncPayPal(db, { client = paypalClient, now = new Date(), savingsReceiver = process.env.SAVINGS_RECEIVER_EMAIL?.trim(), days = SYNC_DAYS } = {}) {
+export async function syncPayPal(db, { client = paypalClient, now = new Date(), savingsReceiver = process.env.SAVINGS_RECEIVER_EMAIL?.trim(), days = SYNC_DAYS, aliases = merchantAliases() } = {}) {
   const start = new Date(now.getTime() - days * 86_400_000);
   let fetched;
   try {
@@ -87,10 +99,14 @@ export async function syncPayPal(db, { client = paypalClient, now = new Date(), 
         counts[c.kind === 'skipped' ? 'skipped' : c.kind]++;
         continue;
       }
-      const { changes } = insert.run(c.row.id, c.row.occurred_at, c.row.amount_cents, c.row.merchant, c.row.description);
+      const merchant = aliases.get(c.row.merchant) ?? c.row.merchant;
+      const { changes } = insert.run(c.row.id, c.row.occurred_at, c.row.amount_cents, merchant, c.row.description);
       if (changes) counts.added++;
       else counts.alreadyStored++;
     }
+    // Rows stored before an alias was set get the new name too.
+    const rename = db.prepare("UPDATE transactions SET merchant = ? WHERE source = 'paypal' AND merchant = ?");
+    for (const [from, to] of aliases) rename.run(to, from);
     setState(db, 'paypal_last_sync', now.toISOString());
     setState(db, 'paypal_last_result', JSON.stringify(counts));
     setState(db, 'paypal_last_error', '');

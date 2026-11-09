@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
-import { classify, syncPayPal, syncStatus } from '../src/paypalSync.js';
+import { classify, syncPayPal, syncStatus, merchantAliases } from '../src/paypalSync.js';
 import { ruleLabel, labelByRules } from '../src/categorizer.js';
 
 const SAVINGS = 'savings@personal.example.com';
@@ -87,4 +87,17 @@ test('name rules label obvious PayPal merchants when the LLM is unavailable', as
   assert.equal(labelByRules(db), 1);
   const labels = db.prepare('SELECT source, category FROM transactions ORDER BY source').all();
   assert.deepEqual(labels.map((r) => [r.source, r.category]), [['paypal', 'fuel'], ['seed', null]]); // seed rows left for the LLM
+});
+
+test('merchant aliases rename PayPal merchants, including rows already stored', async () => {
+  assert.deepEqual([...merchantAliases(' Shell Gas Station = Metro Fuel ;bad; =x;A=B')], [['Shell Gas Station', 'Metro Fuel'], ['A', 'B']]);
+  assert.equal(merchantAliases(undefined).size, 0);
+
+  const db = openDb(':memory:');
+  const client = { searchTransactions: async () => ({ details: [shell], lastRefreshed: null }) };
+  await syncPayPal(db, { client, aliases: new Map() });
+  const names = () => db.prepare("SELECT merchant FROM transactions WHERE source = 'paypal'").all().map((r) => r.merchant);
+  assert.deepEqual(names(), ['Shell Gas Station']);
+  await syncPayPal(db, { client, aliases: merchantAliases('Shell Gas Station=Metro Fuel') });
+  assert.deepEqual(names(), ['Metro Fuel']);
 });
